@@ -7,15 +7,12 @@
   "configurations": [
     {
       "name": "Run Extension",
-      "type": "pwa-extensionHost",
+      "type": "extensionHost",
       "request": "launch",
+      "runtimeExecutable": "${execPath}",
       "args": ["--extensionDevelopmentPath=${workspaceFolder}"],
-      "resolveSourceMapLocations": [
-        "${workspaceFolder}/out/**/*.js",
-        "${workspaceFolder}/../fx-core/build/**/*.js",
-        "${workspaceFolder}/../api/build/**/*.js"
-      ],
-      "preLaunchTask": "npm: build"
+      "sourceMaps": true,
+      "stopOnEntry": false,
     },
     {
       "name": "Extension Tests (No Folder)",

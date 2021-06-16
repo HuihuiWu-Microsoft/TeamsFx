@@ -2,12 +2,17 @@
 // Licensed under the MIT license.
 
 import * as vscode from "vscode";
+import * as nls from "vscode-nls";
 import * as path from "path";
 import { ext } from "./extensionVariables";
 import { TreeItem, TreeCategory, Result, FxError, ok } from "@microsoft/teamsfx-api";
 import * as StringResources from "./resources/Strings.json";
 import { getWorkspacePath } from "./handlers";
 import { isValidProject } from "@microsoft/teamsfx-core";
+
+// The example uses the file message format.
+nls.config({ messageFormat: nls.MessageFormat.file })();
+const localize = nls.loadMessageBundle();
 
 class TreeViewManager {
   private static instance: TreeViewManager;
@@ -66,7 +71,7 @@ class TreeViewManager {
 
     const projectTreeViewCommand = [
       new TreeViewCommand(
-        StringResources.vsc.commandsTreeViewProvider.createProjectTitle,
+        localize("treeview.createProject", StringResources.vsc.commandsTreeViewProvider.createProjectTitle as string),
         StringResources.vsc.commandsTreeViewProvider.createProjectDescription,
         "fx-extension.create",
         vscode.TreeItemCollapsibleState.None,
