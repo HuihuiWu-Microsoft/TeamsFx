@@ -1,3 +1,24 @@
 {
-    "extension.createProject.title": "Teams: Test Create New Project"
+    "extension.createProject.title": "Teams: Test Create New Project",
+    "extension.vsc.commandsTreeViewProvider.getStartTitle": "GETTING STARTED",
+    "extension.vsc.commandsTreeViewProvider.getStartDescription": "Get started with Teamsfx",
+    "extension.vsc.commandsTreeViewProvider.quickStartTitle": "Quick Start",
+    "extension.vsc.commandsTreeViewProvider.quickStartDescription": "Quick Start",
+    "extension.vsc.commandsTreeViewProvider.samplesTitle": "Samples",
+    "extension.vsc.commandsTreeViewProvider.samplesDescription": "Samples",
+    "extension.vsc.commandsTreeViewProvider.documentationTitle": "Documentation",
+    "extension.vsc.commandsTreeViewProvider.documentationDescription": "Documentation",
+    "extension.vsc.commandsTreeViewProvider.accountsTitle": "ACCOUNTS",
+    "extension.vsc.commandsTreeViewProvider.accountsDescription": "Your account list",
+    "extension.vsc.commandsTreeViewProvider.projectTitle": "PROJECT",
+    "extension.vsc.commandsTreeViewProvider.projectDescription": "Manage your project",
+    "extension.vsc.commandsTreeViewProvider.createProjectTitle": "Create New Project",
+    "extension.vsc.commandsTreeViewProvider.createProjectDescription": "Create a new Project for Teams App",
+    "extension.vsc.handlers.concurrentTriggerTask": "Task '%s' is still running. Wait for it to complete before starting another task.",
+    "extension.vsc.handlers.vsCodeEnvironment": "VS Code Environment: %s",
+    "extension.vsc.handlers.operationNotSupport": "Operation not support: %s",
+    "extension.vsc.handlers.loginFailed": "Login failed, the operation is terminated.",
+    "extension.vsc.handlers.coreNotReady": "Core module is loading",
+    "extension.vsc.handlers.teamsToolkit": "Teams Toolkit",
+    "extension.vsc.handlers.fileNotFound": "%s not found, cannot open it."
 }

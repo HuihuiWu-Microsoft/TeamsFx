@@ -1,0 +1,11 @@
+{
+    "core.resource.plugins.spfx.index.webpartDescription": "Web Part Description",
+    "core.resource.plugins.spfx.index.webpartName": "Web Part Name",
+    "core.resource.plugins.spfx.index.NpmInstall": "Run: npm install. This may take more than 5 minutes to finish",
+    "core.resource.solution.pluginNotValid": "Plugin name %s is not valid",
+    "core.resource.solution.deployInProgress": "Deployment in progress. Please wait for its completion.",
+    "core.resource.solution.pricingCalculator": "Pricing calculator",
+    "core.common.pathExists": "Path %s alreay exists. Select a different folder.",
+    "core.common.unzipPackage": "Unzipping the sample package",
+    "core.common.totalSubscriptions": "%d subscriptions discovered"
+}
