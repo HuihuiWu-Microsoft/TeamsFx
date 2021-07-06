@@ -1,5 +1,5 @@
 {
   "all": true,
-  "include": ["src/**/*.ts"],
+  "include": ["src/**"],
   "reporter": ["text", "html", "json-summary"]
 }
