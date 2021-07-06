@@ -46,8 +46,22 @@ jobs:
       - name: Unit Test
         id: unit-test
         shell: bash
+        if: ${{ runner.os != 'Linux' }}
         run: |
           npx lerna run test:unit
+          coverages="{}"
+          for i in $(find . -name coverage-summary.json); do
+            coverages=$(echo $coverages | jq -rc --arg package $(basename $(dirname $(dirname $i))) --argjson total $(jq -cr '.total' $i) '.[$package]= $total')
+          done  
+          echo $coverages
+          echo "::set-output name=coverages::$coverages"
+
+      - name: Unit Test for ubuntu
+        id: unit-test-ubuntu
+        shell: bash
+        if: ${{ runner.os == 'Linux' }}
+        run: |
+          xvfb-run -a npx lerna run test:unit
           coverages="{}"
           for i in $(find . -name coverage-summary.json); do
             coverages=$(echo $coverages | jq -rc --arg package $(basename $(dirname $(dirname $i))) --argjson total $(jq -cr '.total' $i) '.[$package]= $total')
