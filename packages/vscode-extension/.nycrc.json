@@ -1,5 +1,5 @@
 {
   "all": true,
-  "include": ["src/**"],
+  "include": ["out/**"],
   "reporter": ["text", "html", "json-summary"]
 }
