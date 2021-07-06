@@ -46,7 +46,7 @@ jobs:
       - name: Unit Test
         id: unit-test
         shell: bash
-        run: |
+      - run: |
           xvfb-run -a npx lerna run test:unit
           coverages="{}"
           for i in $(find . -name coverage-summary.json); do
@@ -55,7 +55,7 @@ jobs:
           echo $coverages
           echo "::set-output name=coverages::$coverages"
         if: runner.os == 'Linux'
-        run: |
+      - run: |
           npx lerna run test:unit
           coverages="{}"
           for i in $(find . -name coverage-summary.json); do
