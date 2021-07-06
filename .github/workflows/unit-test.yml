@@ -8,7 +8,10 @@ on:
 
 jobs:
   source-branch-test:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     outputs:
       coverages: ${{ steps.unit-test.outputs.coverages }}
     steps:
@@ -51,6 +54,16 @@ jobs:
           done  
           echo $coverages
           echo "::set-output name=coverages::$coverages"
+        if: runner.os == 'Linux'
+        run: |
+          npx lerna run test:unit
+          coverages="{}"
+          for i in $(find . -name coverage-summary.json); do
+            coverages=$(echo $coverages | jq -rc --arg package $(basename $(dirname $(dirname $i))) --argjson total $(jq -cr '.total' $i) '.[$package]= $total')
+          done  
+          echo $coverages
+          echo "::set-output name=coverages::$coverages"
+        if: runner.os != 'Linux'
 
   target-branch-test:
     runs-on: ubuntu-latest
