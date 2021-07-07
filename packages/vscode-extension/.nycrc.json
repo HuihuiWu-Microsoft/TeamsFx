@@ -1,5 +1,6 @@
 {
   "all": true,
-  "extension": [".ts"],
+  "exclude": ["node_modules/**"],
+  "excludeNodeModules": true,
   "reporter": ["text", "html", "json-summary"]
 }
