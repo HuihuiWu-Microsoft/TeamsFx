@@ -1,4 +1,5 @@
 {
   "all": true,
+  "include": ["vscode-extension/src/**"],
   "reporter": ["text", "html", "json-summary"]
 }
