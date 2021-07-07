@@ -1,6 +1,7 @@
 {
   "all": true,
-  "exclude": ["node_modules/**"],
+  "include": ["src/**/*"],
+  "exclude": ["node_modules/**/*", "./**/*.js"],
   "excludeNodeModules": true,
   "reporter": ["text", "html", "json-summary"]
 }
