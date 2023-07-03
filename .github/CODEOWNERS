@@ -217,6 +217,7 @@
 /packages/fx-core/src/component/driver/script @Siglud @Yukun-dong @JerryYangKai @eriolchan
 
 /packages/fx-core/resource/package.nls.json @timngmsft @sffamily @therealjohn
+/packages/fx-core/resource/package.nls.*.json @HuihuiWu-Microsoft
 /packages/fx-core/resource/yaml-schema @1yefuwang1 @wenytang-ms @kuojianlu @Siglud
 /packages/fx-core/src/core @jayzhang @LongOddCode @1yefuwang1 @nliu-ms @xzf0587 @hund030
 
