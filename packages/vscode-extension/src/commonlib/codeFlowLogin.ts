@@ -376,9 +376,10 @@ export class CodeFlowLogin {
     } else {
       try {
         const res = await this.pca.acquireTokenSilent({
+          authority: this.config.auth.authority,
           account: this.account,
           scopes: scopes,
-          forceRefresh: false,
+          forceRefresh: true,
         });
         if (res) {
           return ok(res.accessToken);

@@ -42,6 +42,7 @@ import {
 } from "../telemetry/extTelemetryEvents";
 import { getDefaultString, localize } from "../utils/localizeUtils";
 import { AppStudioScopes } from "@microsoft/teamsfx-core";
+import axios from "axios";
 
 const SERVER_PORT = 0;
 const cachePlugin = new CryptoCachePlugin(m365CacheName);
@@ -89,6 +90,10 @@ export class M365Login extends BasicLogin implements M365TokenProvider {
     return M365Login.instance;
   }
 
+  setTenant(tenant: string) {
+    M365Login.codeFlowInstance.config.auth.authority = `https://login.microsoftonline.com/${tenant}`;
+  }
+
   /**
    * Get team access token
    */
@@ -113,6 +118,24 @@ export class M365Login extends BasicLogin implements M365TokenProvider {
     } else {
       return tokenRes;
     }
+  }
+
+  async getTenantList() {
+    const token = await this.getAccessToken({
+      scopes: ["https://management.azure.com/user_impersonation"],
+      showDialog: false,
+    });
+    if (token.isOk()) {
+      const instance = axios.create({});
+      instance.defaults.headers.common["Authorization"] = `Bearer ${token.value}`;
+      const response = await instance.get(
+        "https://management.azure.com/tenants?api-version=2022-06-01"
+      );
+      if (response.data) {
+        return response.data;
+      }
+    }
+    return [""];
   }
 
   private async signInWhenNoAccountInCache(

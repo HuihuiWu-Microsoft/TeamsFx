@@ -112,8 +112,28 @@ export async function openDocumentLinkHandler(args?: any[]): Promise<Result<bool
 }
 
 export async function openM365AccountHandler() {
-  ExtTelemetry.sendTelemetryEvent(TelemetryEvent.OpenM365Portal);
-  return VS_CODE_UI.openUrl("https://admin.microsoft.com/Adminportal/");
+  const tenants = await M365TokenInstance.getTenantList();
+  const ret = await VS_CODE_UI.selectOption({
+    title: "Switch tenants",
+    options: tenants.value.map((tenants: any) => tenants.displayName),
+    name: "Switch tenants",
+  });
+  if (ret.isOk() && ret.value.result) {
+    void M365TokenInstance.setTenant(
+      tenants.value.find((tenant: any) => tenant.displayName === ret.value.result?.toString())
+        .tenantId
+    );
+    const token = await M365TokenInstance.getAccessToken({
+      scopes: AppStudioScopes,
+      showDialog: false,
+    });
+    if (token.isOk()) {
+      console.log(token.value);
+    }
+  }
+
+  // ExtTelemetry.sendTelemetryEvent(TelemetryEvent.OpenM365Portal);
+  // return VS_CODE_UI.openUrl("https://admin.microsoft.com/Adminportal/");
 }
 
 export async function openAzureAccountHandler() {
