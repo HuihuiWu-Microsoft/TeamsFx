@@ -116,6 +116,7 @@ export class CodeFlowLogin {
       redirectUri: `http://localhost:${serverPort}`,
       prompt: !loginHint ? "select_account" : "login",
       loginHint,
+      authority: this.config.auth.authority,
     };
 
     let deferredRedirect: Deferred<string>;
