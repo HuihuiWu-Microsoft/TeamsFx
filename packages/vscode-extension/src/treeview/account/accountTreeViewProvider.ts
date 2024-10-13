@@ -8,7 +8,7 @@ import { DynamicNode } from "../dynamicNode";
 import envTreeProviderInstance from "../environmentTreeViewProvider";
 import { AzureAccountNode } from "./azureNode";
 import { M365AccountNode } from "./m365Node";
-import { AppStudioScopes } from "@microsoft/teamsfx-core";
+import { AppStudioScopes, AzureScopes } from "@microsoft/teamsfx-core";
 import { isSPFxProject } from "../../globalVariables";
 
 class AccountTreeViewProvider implements vscode.TreeDataProvider<DynamicNode> {
@@ -36,6 +36,12 @@ class AccountTreeViewProvider implements vscode.TreeDataProvider<DynamicNode> {
       { scopes: AppStudioScopes },
       (status, token, accountInfo) =>
         m365AccountStatusChangeHandler("appStudio", status, token, accountInfo)
+    );
+    void tokenProvider.m365TokenProvider?.setStatusChangeMap(
+      "tree-view-switch-tenant",
+      { scopes: AzureScopes },
+      (status, token, accountInfo) =>
+        m365TenantSwitchHandler("appStudio", status, token, accountInfo)
     );
     void tokenProvider.azureAccountProvider?.setStatusChangeMap(
       "tree-view",
@@ -87,6 +93,21 @@ async function m365AccountStatusChangeHandler(
     instance.m365AccountNode.setSwitching();
   }
   await envTreeProviderInstance.reloadEnvironments();
+  return Promise.resolve();
+}
+
+async function m365TenantSwitchHandler(
+  source: string,
+  status: string,
+  token?: string | undefined,
+  accountInfo?: Record<string, unknown> | undefined
+) {
+  const instance = AccountTreeViewProvider.getInstance();
+  if (status === "SignedIn") {
+    if (accountInfo && token) {
+      instance.m365AccountNode.updateTenant(token, accountInfo.tid as string);
+    }
+  }
   return Promise.resolve();
 }
 

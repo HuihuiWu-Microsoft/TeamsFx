@@ -9,11 +9,13 @@ import { DynamicNode } from "../dynamicNode";
 import { AccountItemStatus, loadingIcon, m365Icon } from "./common";
 import { CopilotNode } from "./copilotNode";
 import { SideloadingNode } from "./sideloadingNode";
+import { TenantNode } from "./tenantNode";
 
 export class M365AccountNode extends DynamicNode {
   public status: AccountItemStatus;
   private sideloadingNode: SideloadingNode;
   private copilotNode: CopilotNode | undefined;
+  private tenantNode: TenantNode;
 
   constructor(private eventEmitter: vscode.EventEmitter<DynamicNode | undefined | void>) {
     super("", vscode.TreeItemCollapsibleState.None);
@@ -21,6 +23,7 @@ export class M365AccountNode extends DynamicNode {
     this.contextValue = "signinM365";
     this.sideloadingNode = new SideloadingNode(this.eventEmitter, "");
     this.copilotNode = new CopilotNode(this.eventEmitter, "");
+    this.tenantNode = new TenantNode(this.eventEmitter, "", "");
   }
 
   public setSignedIn(upn: string) {
@@ -86,10 +89,17 @@ export class M365AccountNode extends DynamicNode {
     }
   }
 
+  public updateTenant(token: string, tid: string) {
+    this.tenantNode.token = token;
+    this.tenantNode.tid = tid;
+
+    this.eventEmitter.fire(undefined);
+  }
+
   public override getChildren(): vscode.ProviderResult<DynamicNode[]> {
     return this.copilotNode !== undefined
-      ? [this.sideloadingNode, this.copilotNode]
-      : [this.sideloadingNode];
+      ? [this.tenantNode, this.sideloadingNode, this.copilotNode]
+      : [this.tenantNode, this.sideloadingNode];
   }
 
   public override getTreeItem(): vscode.TreeItem | Promise<vscode.TreeItem> {
