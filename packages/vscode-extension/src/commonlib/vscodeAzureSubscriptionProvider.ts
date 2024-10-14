@@ -129,7 +129,11 @@ export async function getSessionFromVSCode(
   tenantId?: string,
   options?: vscode.AuthenticationGetSessionOptions
 ): Promise<vscode.AuthenticationSession | undefined> {
-  return await vscode.authentication.getSession(Microsoft, getScopes(scopes, tenantId), options);
+  return await vscode.authentication.getSession(
+    Microsoft,
+    getScopes(scopes, "d85e8d90-95a6-4c9f-a8a1-0dad203412bf"),
+    options
+  );
 }
 
 function ensureEndingSlash(value: string): string {
