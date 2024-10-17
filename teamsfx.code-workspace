@@ -1,0 +1,16 @@
+{
+	"folders": [
+		{
+			"path": "packages/api"
+		},
+		{
+			"path": "packages/cli"
+		},
+		{
+			"path": "packages/fx-core"
+		},
+		{
+			"path": "packages/vscode-extension"
+		}
+	]
+}

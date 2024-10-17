@@ -44,7 +44,7 @@ export class AzureAccountManager extends login implements AzureAccountProvider {
   private static instance: AzureAccountManager;
   private static subscriptionId: string | undefined;
   private static subscriptionName: string | undefined;
-  private static tenantId: string | undefined;
+  private static tenantId: string | undefined = "d85e8d90-95a6-4c9f-a8a1-0dad203412bf";
   private static currentStatus: string | undefined;
   private vscodeAzureSubscriptionProvider: VSCodeAzureSubscriptionProvider;
 
