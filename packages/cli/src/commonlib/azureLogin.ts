@@ -63,18 +63,15 @@ function getConfig(tenantId?: string): Configuration {
   } else {
     authority = "https://login.microsoftonline.com/organizations";
   }
-  const config = {
+  const config: Configuration = {
     auth: {
       clientId: "7ea7c24c-b1f6-4a20-9d11-9ae12e9e7ac0",
       authority: authority,
     },
-    broker: {
-      nativeBrokerPlugin: new NativeBrokerPlugin(),
-    },
     system: {
       loggerOptions: {
         loggerCallback(loglevel: any, message: any, containsPii: any) {
-          if (this.logLevel <= LogLevel.Error) {
+          if (this.logLevel && this.logLevel <= LogLevel.Error) {
             void CLILogProvider.log(4 - loglevel, message);
           }
         },
@@ -86,6 +83,12 @@ function getConfig(tenantId?: string): Configuration {
       cachePlugin,
     },
   };
+
+  if (featureFlagManager.getBooleanValue(FeatureFlags.BrokerAuth) && process.platform === "win32") {
+    config.broker = {
+      nativeBrokerPlugin: new NativeBrokerPlugin(),
+    };
+  }
   return config;
 }
 
