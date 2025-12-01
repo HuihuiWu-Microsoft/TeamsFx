@@ -8,3 +8,6 @@ AGENT_SCOPE=shared
 {{/ShareEnabled}}
 # Generated during provision, you can also add your own variables.
 TEAMS_APP_ID=
+{{#SensitivityLabelEnabled}}
+SENSITIVITY_LABEL_ID=
+{{/SensitivityLabelEnabled}}

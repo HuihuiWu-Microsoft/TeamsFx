@@ -9,7 +9,7 @@
     {{/EmbeddedKnowledgeEnabled}}
     {{#SensitivityLabelEnabled}}
     "sensitivity_label": {
-        "id": ""
+        "id": "${{SENSITIVITY_LABEL_ID}}"
     },
     {{/SensitivityLabelEnabled}}
     "name": "{{appName}}",
