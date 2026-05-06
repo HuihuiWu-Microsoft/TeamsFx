@@ -5,11 +5,19 @@ import { SubscriptionClient, TenantIdDescription } from "@azure/arm-resources-su
 import { TokenCredential } from "@azure/core-auth";
 import * as vscode from "vscode";
 import * as azureEnv from "@azure/ms-rest-azure-env";
-import { AzureScopes } from "@microsoft/teamsfx-core";
+import { AzureScopes, isSovereignHigh } from "@microsoft/teamsfx-core";
 import { LoginFailureError } from "./codeFlowLogin";
 import { Environment } from "@azure/ms-rest-azure-env";
 
 export const Microsoft = "microsoft";
+export const MicrosoftSovereignCloud = "microsoft-sovereign-cloud";
+
+export function getAuthProviderId(): string {
+  if (isSovereignHigh()) {
+    return MicrosoftSovereignCloud;
+  }
+  return Microsoft;
+}
 
 // Licensed under the MIT license.
 export class VSCodeAzureSubscriptionProvider {
@@ -134,11 +142,10 @@ export async function getSessionFromVSCode(
   tenantId?: string,
   options?: vscode.AuthenticationGetSessionOptions
 ): Promise<vscode.AuthenticationSession | undefined> {
-  return await vscode.authentication.getSession(
-    Microsoft,
-    formScopesArg(scopes, tenantId),
-    options
-  );
+  const providerId = getAuthProviderId();
+  const formattedScopes = formScopesArg(scopes, tenantId);
+  const session = await vscode.authentication.getSession(providerId, formattedScopes, options);
+  return session;
 }
 
 function ensureEndingSlash(value: string): string {
@@ -149,7 +156,15 @@ function getResourceScopes(scopes?: string | string[]): string[] {
   if (scopes === undefined || scopes === "" || scopes.length === 0) {
     scopes = ensureEndingSlash(getConfiguredAzureEnv().managementEndpointUrl);
   }
-  return Array.from(new Set<string>(scopes));
+
+  const arrScopes = (Array.isArray(scopes) ? scopes : [scopes]).map((scope) => {
+    if (scope.endsWith(".default")) {
+      return scope;
+    } else {
+      return `${scope}.default`;
+    }
+  });
+  return Array.from(new Set<string>(arrScopes));
 }
 
 function addTenantIdScope(scopes: string[], tenantId: string): string[] {
@@ -208,8 +223,14 @@ export interface AzureAuthentication {
  * @returns The configured Azure environment from the settings in the built-in authentication provider extension
  */
 export function getConfiguredAzureEnv(): azureEnv.Environment & { isCustomCloud: boolean } {
+  if (isSovereignHigh()) {
+    return {
+      ...azureEnv.Environment.USGovernment,
+      isCustomCloud: false,
+    };
+  }
   return {
-    ...azureEnv.Environment.get(azureEnv.Environment.AzureCloud.name),
+    ...azureEnv.Environment.AzureCloud,
     isCustomCloud: false,
   };
 }

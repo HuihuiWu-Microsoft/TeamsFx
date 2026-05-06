@@ -42,9 +42,9 @@ import {
 } from "@microsoft/teamsfx-core";
 import { getDefaultString, localize } from "../utils/localizeUtils";
 import {
-  Microsoft,
   VSCodeAzureSubscriptionProvider,
   getSessionFromVSCode,
+  getAuthProviderId,
 } from "./vscodeAzureSubscriptionProvider";
 import { loadTenantId, saveTenantId } from "./cacheAccess";
 import { getUsernameFromClaims } from "./accountInfoUtils";
@@ -485,7 +485,7 @@ export class AzureAccountManager extends login implements AzureAccountProvider {
       AzureAccountManager.currentStatus = loggedIn;
     }
     vscode.authentication.onDidChangeSessions(async (e) => {
-      if (e.provider.id != Microsoft) {
+      if (e.provider.id != getAuthProviderId()) {
         return;
       }
       if (await this.isUserLogin()) {
