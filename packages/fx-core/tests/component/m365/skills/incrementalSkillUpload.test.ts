@@ -260,6 +260,7 @@ class UploadHttpBoundary {
       return [204, undefined];
     }
     if (method === "POST" && path === "/builder/v1/users/packages") {
+      expect(config.params).toMatchObject({ isRAIValidationAsync: true });
       this.submitted.push(multipartZip(config.data));
       if (this.finalStatus === 409) {
         return [409, { error: { code: "Conflict", message: "private conflict response" } }];
@@ -268,6 +269,7 @@ class UploadHttpBoundary {
       return [202, { statusId: "status", titlePreview: { titleId: "title" } }];
     }
     if (method === "GET" && path === "/builder/v1/users/packages/status/status") {
+      expect(config.params).toEqual({ isRAIValidationAsync: true });
       return [
         200,
         {
@@ -294,7 +296,6 @@ describe("incremental skill upload PackageService scenarios", () => {
   beforeEach(() => {
     vi.stubEnv(FeatureFlagName.IncrementalSkillUpload, "true");
     vi.stubEnv("TEAMSFX_BUILDER_API", "true");
-    vi.stubEnv("TEAMSFX_RAI_VALIDATION_ENABLED", "false");
     bytes = packageBytes();
     provider = new MockedM365Provider();
     boundary = new UploadHttpBoundary();
