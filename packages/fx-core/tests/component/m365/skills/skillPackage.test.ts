@@ -2,6 +2,7 @@
 // Licensed under the MIT license.
 
 import AdmZip from "adm-zip";
+import { DeclarativeAgentManifestConverter, TeamsManifestConverter } from "@microsoft/teamsfx-api";
 import fs from "fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import teamsManifest from "../../../plugins/resource/daTemplate/da-no-action-test-template/appPackage/manifest.json";
@@ -191,6 +192,8 @@ describe("skill package inventory", () => {
     });
 
     it("AC-11 SCN-ISU: first and repeated transports use remote folder GUIDs and metadata only", () => {
+      const readRoot = vi.spyOn(TeamsManifestConverter, "jsonToManifest");
+      const readAgent = vi.spyOn(DeclarativeAgentManifestConverter, "jsonToManifest");
       const zip = packageZip({
         agent_skills: [{ folder: "skills/example", exposure: { enabled: false } }],
         "x-agent_skills": [{ folder: "./skills/example", exposure: { audience: ["user"] } }],
@@ -202,25 +205,24 @@ describe("skill package inventory", () => {
       zip.addFile("unrelated.bin", Buffer.from([1, 254]));
       const input = inventory(zip);
       const before = JSON.stringify(input);
+      expect(validateSkillTransportPackage(input).isOk()).toBe(true);
+      expect(JSON.stringify(input)).toBe(before);
       const write = vi.spyOn(fs, "writeFile");
       const writeSync = vi.spyOn(fs, "writeFileSync");
       const mkdir = vi.spyOn(fs, "mkdirSync");
-      for (let attempt = 0; attempt < 2; attempt++) {
-        const result = buildSkillTransportPackage(
-          input,
-          new Map([["skills/example", remoteFolder]])
-        );
+      for (const folder of [remoteFolder, secondRemoteFolder]) {
+        const result = buildSkillTransportPackage(input, new Map([["skills/example", folder]]));
         expect(result.isOk()).toBe(true);
         if (result.isErr()) throw result.error;
         const transport = new AdmZip(result.value);
         expect(readZipJson(transport, "packageMetadata.json")).toEqual({
           builderInfo: { builderName: "TeamsToolKit" },
-          skills: [{ folder: remoteFolder, name: "example", description: "Example skill" }],
+          skills: [{ folder, name: "example", description: "Example skill" }],
         });
         expect(readZipJson(transport, "declarativeAgent.json")).toEqual({
           ...agentManifest,
-          agent_skills: [{ folder: remoteFolder, exposure: { enabled: false } }],
-          "x-agent_skills": [{ folder: remoteFolder, exposure: { audience: ["user"] } }],
+          agent_skills: [{ folder, exposure: { enabled: false } }],
+          "x-agent_skills": [{ folder, exposure: { audience: ["user"] } }],
           "x-extra": { retain: true },
         });
         expect(
@@ -235,6 +237,8 @@ describe("skill package inventory", () => {
       expect(write).not.toHaveBeenCalled();
       expect(writeSync).not.toHaveBeenCalled();
       expect(mkdir).not.toHaveBeenCalled();
+      expect(readRoot).toHaveBeenCalledTimes(1);
+      expect(readAgent).toHaveBeenCalledTimes(1);
     });
 
     it("AC-11: transforms every current and legacy agent sharing the same local folder", () => {

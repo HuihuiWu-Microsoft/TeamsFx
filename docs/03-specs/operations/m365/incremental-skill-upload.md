@@ -80,6 +80,13 @@ Fresh drafts receive all local files. Retained copy-free drafts can skip matchin
 files on a later user-initiated run; fresh drafts after publication cannot reuse
 the published files as a hash baseline.
 
+Package discovery reads the root and referenced DA JSON from the ZIP buffer already
+loaded by the upload service, not from separate project files. Manifest validation
+and skill-file inventory run once per incremental stage. Preflight and final
+transport construction reuse that validated inventory and copy the manifest
+objects and skill-reference arrays they update, leaving the source inventory
+unchanged.
+
 ## Wire-contract gates
 
 ### Verified service contract

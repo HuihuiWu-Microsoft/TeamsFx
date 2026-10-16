@@ -42,6 +42,7 @@ export interface SkillAgentManifest {
   manifest: Record<string, unknown>;
 }
 
+/** Validated inventory from readSkillPackage; consumers must not mutate its source data. */
 export interface SkillPackage {
   /** Unmodified source ZIP, retained for a separately defined transport transformation. */
   data: Buffer;
@@ -66,14 +67,10 @@ export function validateSkillTransportPackage(source: SkillPackage): Result<void
 }
 
 function processSkillTransportPackage(
-  source: SkillPackage,
+  input: SkillPackage,
   folders?: ReadonlyMap<string, string>
 ): Result<Buffer, FxError> {
   try {
-    // Re-read the source bytes so mutable inventory objects cannot redirect ZIP transformations.
-    const inventory = readSkillPackage(source.data);
-    if (inventory.isErr()) return err(inventory.error);
-    const input = inventory.value;
     if (folders) {
       if (folders.size !== input.skills.length) return invalidPackage();
       const remoteIds = new Set<string>();
@@ -181,24 +178,32 @@ function processSkillTransportPackage(
     const changedManifests = new Map<string, Record<string, unknown>>();
     for (const reference of input.references) {
       const manifest =
-        reference.manifestPath === "manifest.json"
+        changedManifests.get(reference.manifestPath) ??
+        (reference.manifestPath === "manifest.json"
           ? input.manifest
           : input.declarativeAgents.find((candidate) => candidate.path === reference.manifestPath)
-              ?.manifest;
+              ?.manifest);
       if (!manifest) return invalidPackage();
       const skills = manifest[reference.property];
       if (!Array.isArray(skills) || !isRecord(skills[reference.index])) return invalidPackage();
-      skills[reference.index] = {
+      const updatedSkills = [...skills];
+      updatedSkills[reference.index] = {
         ...skills[reference.index],
         folder: folders?.get(reference.folder),
       };
-      changedManifests.set(reference.manifestPath, manifest);
+      changedManifests.set(reference.manifestPath, {
+        ...manifest,
+        [reference.property]: updatedSkills,
+      });
     }
     const roots = input.skills.map((skill) => skill.folder.toLowerCase());
     const documents = new Map<string, unknown>([
-      ["manifest.json", input.manifest],
+      ["manifest.json", changedManifests.get("manifest.json") ?? input.manifest],
       ["packageMetadata.json", transportMetadata],
-      ...input.declarativeAgents.map((agent): [string, unknown] => [agent.path, agent.manifest]),
+      ...input.declarativeAgents.map((agent): [string, unknown] => [
+        agent.path,
+        changedManifests.get(agent.path) ?? agent.manifest,
+      ]),
     ]);
     if (!safeRemainingReferences(documents, entries, roots)) return invalidPackage();
     if (!folders) return ok(input.data);
@@ -291,179 +296,186 @@ function safeRemainingReferences(
 /** Inventory and validate only; this function never extracts files or performs remote I/O. */
 export function readSkillPackage(data: Buffer): Result<SkillPackage, FxError> {
   try {
-    const zip = new AdmZip(data);
-    const entries = new Map<string, AdmZip.IZipEntry>();
-    const paths = new Map<string, { path: string; directory: boolean }>();
-    for (const entry of zip.getEntries()) {
-      const path = confinedPath(entry.entryName);
-      const mode = (entry.attr >>> 16) & 0xf000;
-      if (
-        !path ||
-        entries.has(path.toLowerCase()) ||
-        (mode !== 0 && mode !== 0x8000 && mode !== 0x4000)
-      ) {
-        return invalidPackage();
-      }
-      const segments = path.split("/");
-      for (let index = 0; index < segments.length; index++) {
-        const prefix = segments.slice(0, index + 1).join("/");
-        const directory = index < segments.length - 1 || entry.isDirectory;
-        const existing = paths.get(prefix.toLowerCase());
-        if (existing && (existing.path !== prefix || existing.directory !== directory)) {
-          return invalidPackage();
-        }
-        paths.set(prefix.toLowerCase(), { path: prefix, directory });
-      }
-      entries.set(path.toLowerCase(), entry);
-    }
+    const entries = readPackageEntries(new AdmZip(data));
+    if (entries.isErr()) return err(entries.error);
+    const root = readRootManifest(entries.value);
+    if (root.isErr()) return err(root.error);
+    const agents = readAgentManifests(entries.value, root.value.manifest);
+    if (agents.isErr()) return err(agents.error);
 
-    const manifestEntry = entries.get("manifest.json");
-    if (
-      !manifestEntry ||
-      manifestEntry.isDirectory ||
-      confinedPath(manifestEntry.entryName) !== "manifest.json"
-    ) {
-      return invalidPackage();
-    }
-    const manifestText = decodeText(manifestEntry.getData());
-    const manifest: unknown = JSON.parse(manifestText);
-    if (
-      !isRecord(manifest) ||
-      typeof manifest.id !== "string" ||
-      !isGuid(manifest.id) ||
-      typeof manifest.version !== "string" ||
-      !manifest.version.trim() ||
-      typeof manifest.manifestVersion !== "string" ||
-      !manifest.manifestVersion.trim()
-    ) {
-      return invalidPackage();
-    }
-    // Known schema versions are validated; guarded records also cover preview extension fields
-    // and future versions for which the converter currently returns unchecked JSON.
-    // The two agent-list spellings do not coexist in every generated Teams schema.
-    // Validate the common manifest here and guard both lists below without dropping either.
-    TeamsManifestConverter.jsonToManifest(
-      JSON.stringify({ ...manifest, copilotAgents: undefined, copilotExtensions: undefined })
-    );
-    const declarativeAgents: SkillAgentManifest[] = [];
-    const rootReferences = readSkillReferences(manifest, "manifest.json", "agentSkills");
+    const rootReferences = readSkillReferences(root.value.manifest, "manifest.json", "agentSkills");
     if (rootReferences.isErr()) return err(rootReferences.error);
     const references = rootReferences.value;
-    const agentPaths = new Set<string>();
-    const agentLists = [
-      { container: manifest.copilotAgents, property: "declarativeAgents" },
-      { container: manifest.copilotExtensions, property: "declarativeCopilots" },
-    ];
-    for (const { container, property } of agentLists) {
-      if (container === undefined) continue;
-      if (!isRecord(container)) return invalidPackage();
-      const agents = container[property];
-      if (agents === undefined) continue;
-      if (!Array.isArray(agents)) return invalidPackage();
-      for (const agent of agents) {
-        if (
-          !isRecord(agent) ||
-          typeof agent.id !== "string" ||
-          !agent.id.trim() ||
-          typeof agent.file !== "string"
-        ) {
-          return invalidPackage();
-        }
-        const path = confinedPath(agent.file);
-        if (!path) return invalidPackage();
-        const entry = entries.get(path.toLowerCase());
-        if (!entry || entry.isDirectory || confinedPath(entry.entryName) !== path) {
-          return invalidPackage();
-        }
-        if (agentPaths.has(path)) continue;
-        agentPaths.add(path);
-        const text = decodeText(entry.getData());
-        const agentManifest: unknown = JSON.parse(text);
-        if (
-          !isRecord(agentManifest) ||
-          typeof agentManifest.version !== "string" ||
-          !agentManifest.version.trim() ||
-          typeof agentManifest.name !== "string" ||
-          !agentManifest.name.trim()
-        ) {
-          return invalidPackage();
-        }
-        DeclarativeAgentManifestConverter.jsonToManifest(text);
-        declarativeAgents.push({ path, manifest: agentManifest });
-        const properties: SkillReference["property"][] = ["agent_skills", "x-agent_skills"];
-        for (const skillProperty of properties) {
-          const agentReferences = readSkillReferences(agentManifest, path, skillProperty);
-          if (agentReferences.isErr()) return err(agentReferences.error);
-          references.push(...agentReferences.value);
-        }
+    const properties: SkillReference["property"][] = ["agent_skills", "x-agent_skills"];
+    for (const agent of agents.value) {
+      for (const property of properties) {
+        const agentReferences = readSkillReferences(agent.manifest, agent.path, property);
+        if (agentReferences.isErr()) return err(agentReferences.error);
+        references.push(...agentReferences.value);
       }
     }
-
-    const skills: LocalSkill[] = [];
-    const folders = new Set<string>();
-    const names = new Set<string>();
-    for (const reference of references) {
-      const folder = reference.folder;
-      if (folders.has(folder)) continue;
-      const name = folder.split("/").pop();
-      if (
-        !name ||
-        name.length > 64 ||
-        !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name) ||
-        names.has(name) ||
-        [...folders].some(
-          (existing) =>
-            existing.toLowerCase() === folder.toLowerCase() ||
-            existing.toLowerCase().startsWith(`${folder.toLowerCase()}/`) ||
-            folder.toLowerCase().startsWith(`${existing.toLowerCase()}/`)
-        )
-      ) {
-        return invalidPackage();
-      }
-      const skillMd = entries.get(`${folder}/SKILL.md`.toLowerCase());
-      if (
-        !skillMd ||
-        skillMd.isDirectory ||
-        confinedPath(skillMd.entryName) !== `${folder}/SKILL.md`
-      ) {
-        return invalidPackage();
-      }
-      const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(decodeText(skillMd.getData()));
-      if (!match) return invalidPackage();
-      const metadata: unknown = yaml.load(match[1]);
-      if (
-        !isRecord(metadata) ||
-        metadata.name !== name ||
-        typeof metadata.description !== "string" ||
-        !metadata.description.trim() ||
-        metadata.description.length > 1024
-      ) {
-        return invalidPackage();
-      }
-      const files: SkillPackageFile[] = [];
-      for (const entry of entries.values()) {
-        const path = confinedPath(entry.entryName);
-        if (path?.startsWith(`${folder}/`) && !entry.isDirectory) {
-          files.push({ path: path.slice(folder.length + 1), content: entry.getData() });
-        }
-      }
-      files.sort((left, right) => (left.path < right.path ? -1 : left.path > right.path ? 1 : 0));
-      skills.push({ folder, name, description: metadata.description, files });
-      folders.add(folder);
-      names.add(name);
-    }
+    const skills = readLocalSkills(entries.value, references);
+    if (skills.isErr()) return err(skills.error);
     return ok({
       data: Buffer.from(data),
-      agentId: manifest.id,
-      manifest,
-      declarativeAgents,
+      ...root.value,
+      declarativeAgents: agents.value,
       references,
-      skills,
+      skills: skills.value,
     });
   } catch {
     // Parser errors may contain entire manifest/frontmatter values. Do not expose those values.
     return invalidPackage();
   }
+}
+
+function readPackageEntries(zip: AdmZip): Result<Map<string, AdmZip.IZipEntry>, FxError> {
+  const entries = new Map<string, AdmZip.IZipEntry>();
+  const paths = new Map<string, { path: string; directory: boolean }>();
+  for (const entry of zip.getEntries()) {
+    const path = confinedPath(entry.entryName);
+    const mode = (entry.attr >>> 16) & 0xf000;
+    if (!path || entries.has(path) || (mode !== 0 && mode !== 0x8000 && mode !== 0x4000)) {
+      return invalidPackage();
+    }
+    const segments = path.split("/");
+    for (let index = 0; index < segments.length; index++) {
+      const prefix = segments.slice(0, index + 1).join("/");
+      const directory = index < segments.length - 1 || entry.isDirectory;
+      const existing = paths.get(prefix.toLowerCase());
+      if (existing && (existing.path !== prefix || existing.directory !== directory)) {
+        return invalidPackage();
+      }
+      paths.set(prefix.toLowerCase(), { path: prefix, directory });
+    }
+    entries.set(path, entry);
+  }
+  return ok(entries);
+}
+
+function readRootManifest(
+  entries: ReadonlyMap<string, AdmZip.IZipEntry>
+): Result<Pick<SkillPackage, "manifest" | "agentId">, FxError> {
+  const entry = entries.get("manifest.json");
+  if (!entry || entry.isDirectory) return invalidPackage();
+  const manifest: unknown = JSON.parse(decodeText(entry.getData()));
+  if (
+    !isRecord(manifest) ||
+    typeof manifest.id !== "string" ||
+    !isGuid(manifest.id) ||
+    typeof manifest.version !== "string" ||
+    !manifest.version.trim() ||
+    typeof manifest.manifestVersion !== "string" ||
+    !manifest.manifestVersion.trim()
+  ) {
+    return invalidPackage();
+  }
+  // Guards cover future schemas; validate the two agent-list spellings separately below.
+  TeamsManifestConverter.jsonToManifest(
+    JSON.stringify({ ...manifest, copilotAgents: undefined, copilotExtensions: undefined })
+  );
+  return ok({ manifest, agentId: manifest.id });
+}
+
+function readAgentManifests(
+  entries: ReadonlyMap<string, AdmZip.IZipEntry>,
+  manifest: Record<string, unknown>
+): Result<SkillAgentManifest[], FxError> {
+  const result: SkillAgentManifest[] = [];
+  const agentPaths = new Set<string>();
+  const agentLists = [
+    { container: manifest.copilotAgents, property: "declarativeAgents" },
+    { container: manifest.copilotExtensions, property: "declarativeCopilots" },
+  ];
+  for (const { container, property } of agentLists) {
+    if (container === undefined) continue;
+    if (!isRecord(container)) return invalidPackage();
+    const agents = container[property];
+    if (agents === undefined) continue;
+    if (!Array.isArray(agents)) return invalidPackage();
+    for (const agent of agents) {
+      if (
+        !isRecord(agent) ||
+        typeof agent.id !== "string" ||
+        !agent.id.trim() ||
+        typeof agent.file !== "string"
+      ) {
+        return invalidPackage();
+      }
+      const path = confinedPath(agent.file);
+      if (!path) return invalidPackage();
+      const entry = entries.get(path);
+      if (!entry || entry.isDirectory) return invalidPackage();
+      if (agentPaths.has(path)) continue;
+      agentPaths.add(path);
+      const text = decodeText(entry.getData());
+      const agentManifest: unknown = JSON.parse(text);
+      if (
+        !isRecord(agentManifest) ||
+        typeof agentManifest.version !== "string" ||
+        !agentManifest.version.trim() ||
+        typeof agentManifest.name !== "string" ||
+        !agentManifest.name.trim()
+      ) {
+        return invalidPackage();
+      }
+      DeclarativeAgentManifestConverter.jsonToManifest(text);
+      result.push({ path, manifest: agentManifest });
+    }
+  }
+  return ok(result);
+}
+
+function readLocalSkills(
+  entries: ReadonlyMap<string, AdmZip.IZipEntry>,
+  references: SkillReference[]
+): Result<LocalSkill[], FxError> {
+  const skills: LocalSkill[] = [];
+  const folders = new Set<string>();
+  const names = new Set<string>();
+  for (const { folder } of references) {
+    if (folders.has(folder)) continue;
+    const name = folder.split("/").pop();
+    if (
+      !name ||
+      name.length > 64 ||
+      !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name) ||
+      names.has(name) ||
+      [...folders].some(
+        (existing) =>
+          existing.toLowerCase() === folder.toLowerCase() ||
+          existing.toLowerCase().startsWith(`${folder.toLowerCase()}/`) ||
+          folder.toLowerCase().startsWith(`${existing.toLowerCase()}/`)
+      )
+    ) {
+      return invalidPackage();
+    }
+    const skillMd = entries.get(`${folder}/SKILL.md`);
+    if (!skillMd || skillMd.isDirectory) return invalidPackage();
+    const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(decodeText(skillMd.getData()));
+    if (!match) return invalidPackage();
+    const metadata: unknown = yaml.load(match[1]);
+    if (
+      !isRecord(metadata) ||
+      metadata.name !== name ||
+      typeof metadata.description !== "string" ||
+      !metadata.description.trim() ||
+      metadata.description.length > 1024
+    ) {
+      return invalidPackage();
+    }
+    const files: SkillPackageFile[] = [];
+    for (const [path, entry] of entries) {
+      if (path.startsWith(`${folder}/`) && !entry.isDirectory) {
+        files.push({ path: path.slice(folder.length + 1), content: entry.getData() });
+      }
+    }
+    files.sort((left, right) => (left.path < right.path ? -1 : left.path > right.path ? 1 : 0));
+    skills.push({ folder, name, description: metadata.description, files });
+    folders.add(folder);
+    names.add(name);
+  }
+  return ok(skills);
 }
 
 function readSkillReferences(

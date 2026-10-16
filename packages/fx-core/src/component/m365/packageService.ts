@@ -249,16 +249,16 @@ export class PackageService {
   @hooks([ErrorContextMW({ source: M365ErrorSource, component: M365ErrorComponent })])
   public async sideLoadingV2(
     token: string,
-    manifestPath: string,
+    packagePath: string,
     appScope: AppScope
   ): Promise<[string, string]> {
     try {
-      this.checkZip(manifestPath);
-      let data = await fs.readFile(manifestPath);
+      this.checkZip(packagePath);
+      let data = await fs.readFile(packagePath);
       const serviceUrl = await this.getTitleServiceUrl(token);
       let hasSkills = false;
       if (featureFlagManager.getBooleanValue(FeatureFlags.IncrementalSkillUpload)) {
-        this.validatePackageSize(manifestPath, data.byteLength);
+        this.validatePackageSize(packagePath, data.byteLength);
         const prepared = await prepareIncrementalSkillUpload(
           data,
           serviceUrl,
