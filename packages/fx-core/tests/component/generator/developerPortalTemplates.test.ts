@@ -81,6 +81,8 @@ describe("SCN-DP-MIGRATION template identity bindings", () => {
       const vars = variables(enabled);
       for (const file of legacyFiles.filter((entry) => entry.endsWith(".yml.tpl"))) {
         const rendered = renderTemplateFileData(file, fs.readFileSync(file), vars).toString();
+        assert.notMatch(rendered, /[ \t]+\r?$/m, file);
+        assert.isTrue(rendered.endsWith("\n"), file);
         const document = load(rendered);
         assert.isTrue(validator.validate(document, document.version), file);
       }
@@ -217,6 +219,10 @@ describe("SCN-DP-MIGRATION template identity bindings", () => {
         for (const entry of identityFiles) {
           assert.isTrue(entry.endsWith(".tpl"), entry);
           const rendered = renderMustache(fs.readFileSync(entry, "utf8"), vars)._unsafeUnwrap();
+          if (entry.endsWith(".yml.tpl")) {
+            assert.notMatch(rendered, /[ \t]+\r?$/m, entry);
+            assert.isTrue(rendered.endsWith("\n"), entry);
+          }
           assert.notInclude(rendered, "APP_MANIFEST_ID", entry);
           assert.notMatch(rendered, /\{\{(?:AppId|AppManifestId|LocalAppManifestId)/, entry);
           if (enabled) assert.notInclude(rendered, "TEAMS_APP_ID", entry);

@@ -15,6 +15,10 @@ an object or null `appProfile`, and resource-ID agreement for get/update. They d
 not recursively validate optional profile data or reject additional fields.
 Nested identity requirements remain the responsibility of the consuming
 operation, including create/update identity checks and DP handoff validation.
+The draft manifest type is derived recursively from the manifest package's
+`TeamsManifest` union (re-exported by `teamsfx-api`). Draft fields may be missing
+or null, including nested fields, while schema version and enum constraints are
+retained. No separate handwritten manifest field definitions are maintained.
 
 `teamsApp/create.writeToEnvironmentFile` accepts either `appId` or `teamsAppId`,
 never both, in every supported YAML version. The destination remains customizable.

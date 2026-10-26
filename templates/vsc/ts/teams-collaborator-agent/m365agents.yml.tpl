@@ -21,7 +21,7 @@ provision:
       {{^NewDeveloperPortalApis}}
       teamsAppId: TEAMS_APP_ID
       {{/NewDeveloperPortalApis}}
-      
+
   - uses: arm/deploy  # Deploy given ARM templates parallelly.
     with:
       # AZURE_SUBSCRIPTION_ID is a built-in environment variable,

@@ -88,7 +88,7 @@ deploy:
     with:
       args: install
       workingDirectory: ./src/Web
-      
+
   - uses: cli/runNpmCommand
     name: build app
     with:

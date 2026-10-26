@@ -85,7 +85,7 @@ provision:
       manifestPath: ./appPackage/manifest.json
       outputZipPath: ./appPackage/build/appPackage.${{TEAMSFX_ENV}}.zip
       outputFolder: ./appPackage/build
- 
+
   # Validate app package using validation rules
   - uses: teamsApp/validateAppPackage
     with:

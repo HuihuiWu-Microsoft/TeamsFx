@@ -7,6 +7,32 @@ import { AppDefinition } from "../driver/teamsApp/interfaces/appdefinitions/appD
 /** App response from either the legacy or current Developer Portal API. */
 export type DevPortalAppResponse = AppDefinition | AppResponse;
 
+type ApplicationManifest = NonNullable<
+  NonNullable<NonNullable<AppResponse["appProfile"]>["appDetails"]>["applicationManifest"]
+>;
+
+type ManifestProperty<
+  Key extends PropertyKey,
+  Manifest = ApplicationManifest,
+> = Manifest extends unknown ? (Key extends keyof Manifest ? Manifest[Key] : never) : never;
+
+type AppCapabilities = {
+  [
+    Key in
+      | "bots"
+      | "staticTabs"
+      | "configurableTabs"
+      | "meetingExtensionDefinition"
+      | "connectors"
+      | "activities"
+      | "supportsChannelFeatures"
+  ]?: AppDefinition[Key] | ManifestProperty<Key>;
+} & {
+  appName?: string;
+  messagingExtensions?:
+    AppDefinition["messagingExtensions"] | ManifestProperty<"composeExtensions">;
+};
+
 export function getAppResourceId(app: DevPortalAppResponse): string | undefined {
   return "appProfile" in app ? app.appId : app.teamsAppId;
 }
@@ -18,7 +44,7 @@ export function getAppManifestId(app: DevPortalAppResponse): string | undefined 
 }
 
 // Capability questions need a small common view, not a legacy response conversion.
-export function getAppCapabilities(app?: DevPortalAppResponse) {
+export function getAppCapabilities(app?: DevPortalAppResponse): AppCapabilities {
   if (app && "appProfile" in app) {
     const manifest = app.appProfile?.appDetails?.applicationManifest;
     return {
@@ -27,10 +53,17 @@ export function getAppCapabilities(app?: DevPortalAppResponse) {
       staticTabs: manifest?.staticTabs ?? undefined,
       configurableTabs: manifest?.configurableTabs ?? undefined,
       messagingExtensions: manifest?.composeExtensions ?? undefined,
-      meetingExtensionDefinition: manifest?.meetingExtensionDefinition ?? undefined,
+      meetingExtensionDefinition:
+        manifest && "meetingExtensionDefinition" in manifest
+          ? (manifest.meetingExtensionDefinition ?? undefined)
+          : undefined,
       connectors: manifest?.connectors ?? undefined,
-      activities: manifest?.activities ?? undefined,
-      supportsChannelFeatures: manifest?.supportsChannelFeatures ?? undefined,
+      activities:
+        manifest && "activities" in manifest ? (manifest.activities ?? undefined) : undefined,
+      supportsChannelFeatures:
+        manifest && "supportsChannelFeatures" in manifest
+          ? (manifest.supportsChannelFeatures ?? undefined)
+          : undefined,
     };
   }
   return {

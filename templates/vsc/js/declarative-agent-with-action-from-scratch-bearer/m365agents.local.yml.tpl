@@ -51,7 +51,7 @@ provision:
   - uses: apiKey/update
     with:
       # Name of the API Key
-      name: apiKey      
+      name: apiKey
       # app ID
       {{#NewDeveloperPortalApis}}
       appId: ${{APP_ID}}

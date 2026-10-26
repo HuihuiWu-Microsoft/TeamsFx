@@ -24,7 +24,7 @@ provision:
       name: {{appName}}${{APP_NAME_SUFFIX}}
     # Write the information of created resources into environment file for
     # the specified environment variable(s).
-    writeToEnvironmentFile: 
+    writeToEnvironmentFile:
       {{#NewDeveloperPortalApis}}
       appId: APP_ID
       {{/NewDeveloperPortalApis}}

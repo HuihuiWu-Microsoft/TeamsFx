@@ -50,7 +50,7 @@ provision:
   #         parameters: ./infra/azure.parameters.local.json
   #         deploymentName: Create-resources-for-bot-local
   #     bicepCliVersion: v0.9.1
-  
+
   # Local debugging steps without enabling SSO
   - uses: botFramework/create
     with:
@@ -109,7 +109,7 @@ provision:
       manifestPath: ./appPackage/manifest.json
       outputZipPath: ./appPackage/build/appPackage.${{TEAMSFX_ENV}}.zip
       outputFolder: ./appPackage/build
- 
+
   # Validate app package using validation rules
   - uses: teamsApp/validateAppPackage
     with:

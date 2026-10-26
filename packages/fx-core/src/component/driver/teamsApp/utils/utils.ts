@@ -110,7 +110,7 @@ function isApiBasedMessageExtension(app: DevPortalAppResponse): boolean {
       : "messagingExtensionServiceType" in extension
         ? extension.messagingExtensionServiceType
         : undefined;
-  return serviceType?.toLowerCase() === "apibased";
+  return typeof serviceType === "string" && serviceType.toLowerCase() === "apibased";
 }
 
 export function containsUnsupportedFeature(app: DevPortalAppResponse): boolean {
