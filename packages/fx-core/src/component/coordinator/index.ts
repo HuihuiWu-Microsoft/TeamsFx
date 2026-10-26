@@ -345,8 +345,11 @@ class Coordinator {
 
     for (const action of projectModel.provision?.driverDefs ?? []) {
       if (action.uses === "teamsApp/create") {
-        const teamsAppIdKeyName = action.writeToEnvironmentFile?.teamsAppId || "TEAMS_APP_ID";
-        if (!process.env[teamsAppIdKeyName]) {
+        const teamsAppIdKeyName =
+          action.writeToEnvironmentFile?.appId ??
+          action.writeToEnvironmentFile?.teamsAppId ??
+          "APP_ID";
+        if (!process.env[teamsAppIdKeyName] && !process.env.APP_ID && !process.env.TEAMS_APP_ID) {
           return err(new MissingEnvironmentVariablesError("coordinator", teamsAppIdKeyName));
         }
         break;

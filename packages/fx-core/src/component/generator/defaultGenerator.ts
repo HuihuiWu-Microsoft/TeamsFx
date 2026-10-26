@@ -114,6 +114,7 @@ export class DefaultTemplateGenerator implements IGenerator {
         `${MetadataV3.sandboxConfigFile}.tpl`,
         `${MetadataV4.sandboxConfigFile}.tpl`,
         ".env.sandbox",
+        ".env.sandbox.tpl",
         ".env.sandbox.user.tpl",
       ];
       const parts = fileName.split("/");
@@ -134,7 +135,7 @@ export class DefaultTemplateGenerator implements IGenerator {
     const folderName =
       templateMetadata?.language === "common" || templateMetadata?.language === "none"
         ? templateMetadata.id
-        : templateMetadata?.id.substring(0, templateMetadata.id.lastIndexOf("-")) ?? "";
+        : (templateMetadata?.id.substring(0, templateMetadata.id.lastIndexOf("-")) ?? "");
 
     const generatorContext: GeneratorContext = {
       name: folderName,

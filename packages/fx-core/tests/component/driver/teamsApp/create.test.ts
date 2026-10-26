@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT license.
 
-import { err, UserError } from "@microsoft/teamsfx-api";
+import { err, ok, UserError } from "@microsoft/teamsfx-api";
 import AdmZip from "adm-zip";
 import fs from "fs-extra";
 import mockedEnv from "mocked-env";
@@ -35,9 +35,16 @@ describe("teamsApp/create", async () => {
     userList: [],
     tenantId: uuid(),
   };
+  const nativeApp = {
+    appId,
+    appProfile: { appDetails: { applicationManifest: { id: appId } } },
+  };
 
   beforeEach(() => {
     process.env[FeatureFlagName.NewDeveloperPortalApis] = "true";
+    vi.spyOn(mockedDriverContext.m365TokenProvider, "getJsonObject").mockResolvedValue(
+      ok({ tid: appDef.tenantId })
+    );
   });
 
   afterEach(() => {
@@ -101,7 +108,7 @@ describe("teamsApp/create", async () => {
     vi.spyOn(teamsDevPortalClient, "getApp").mockImplementation(() => {
       throw new Error("404");
     });
-    const createAppSpy = vi.spyOn(teamsDevPortalClient, "createApp").mockResolvedValue(appDef);
+    const createAppSpy = vi.spyOn(teamsDevPortalClient, "createApp").mockResolvedValue(nativeApp);
     const readFileSpy = vi.spyOn(fs, "readFile");
 
     const result = (await teamsAppDriver.execute(args, mockedDriverContext)).result;
@@ -109,7 +116,7 @@ describe("teamsApp/create", async () => {
     expect(createAppSpy).toHaveBeenCalledWith("fakeToken", appDef.appName);
     expect(readFileSpy).not.toHaveBeenCalled();
     if (result.isOk()) {
-      chai.assert.equal(result.value.get("TEAMS_APP_ID"), appId);
+      chai.assert.equal(result.value.get("APP_ID"), appId);
     }
   });
 
@@ -146,7 +153,7 @@ describe("teamsApp/create", async () => {
     };
 
     restoreEnv = mockedEnv({ TEAMS_APP_ID: appId });
-    vi.spyOn(teamsDevPortalClient, "getApp").mockResolvedValue(appDef);
+    vi.spyOn(teamsDevPortalClient, "getApp").mockResolvedValue(nativeApp);
     const createAppSpy = vi.spyOn(teamsDevPortalClient, "createApp");
 
     const result = (await teamsAppDriver.execute(args, mockedDriverContext)).result;
@@ -154,14 +161,13 @@ describe("teamsApp/create", async () => {
     expect(createAppSpy).not.toHaveBeenCalled();
   });
 
-  it("preserves the manifest app ID when the Developer Portal resource ID differs", async () => {
-    const teamsAppId = uuid();
+  it("AC-14: preserves both identities when the Developer Portal resource ID differs", async () => {
+    const manifestId = uuid();
     const resourceAppId = uuid();
-    restoreEnv = mockedEnv({ TEAMS_APP_ID: teamsAppId });
+    restoreEnv = mockedEnv({ APP_ID: resourceAppId, APP_MANIFEST_ID: manifestId });
     vi.spyOn(teamsDevPortalClient, "getApp").mockResolvedValue({
-      ...appDef,
-      teamsAppId,
       appId: resourceAppId,
+      appProfile: { appDetails: { applicationManifest: { id: manifestId } } },
     });
 
     const result = (await teamsAppDriver.execute({ name: appDef.appName! }, mockedDriverContext))
@@ -169,7 +175,8 @@ describe("teamsApp/create", async () => {
 
     chai.assert.isTrue(result.isOk());
     if (result.isOk()) {
-      chai.assert.equal(result.value.get("TEAMS_APP_ID"), teamsAppId);
+      chai.assert.equal(result.value.get("APP_ID"), resourceAppId);
+      chai.assert.equal(process.env.APP_MANIFEST_ID, manifestId);
     }
   });
 
@@ -204,8 +211,8 @@ describe("teamsApp/create", async () => {
 
   it("reuses the created app when provision is retried", async () => {
     const args: CreateTeamsAppArgs = { name: appDef.appName! };
-    const createAppSpy = vi.spyOn(teamsDevPortalClient, "createApp").mockResolvedValue(appDef);
-    const getAppSpy = vi.spyOn(teamsDevPortalClient, "getApp").mockResolvedValue(appDef);
+    const createAppSpy = vi.spyOn(teamsDevPortalClient, "createApp").mockResolvedValue(nativeApp);
+    const getAppSpy = vi.spyOn(teamsDevPortalClient, "getApp").mockResolvedValue(nativeApp);
 
     const firstResult = (await teamsAppDriver.execute(args, mockedDriverContext)).result;
     chai.assert.isTrue(firstResult.isOk());
@@ -252,7 +259,7 @@ describe("teamsApp/create", async () => {
     vi.spyOn(teamsDevPortalClient, "getApp").mockImplementation(() => {
       throw new Error("404");
     });
-    vi.spyOn(teamsDevPortalClient, "createApp").mockResolvedValue(appDef);
+    vi.spyOn(teamsDevPortalClient, "createApp").mockResolvedValue(nativeApp);
 
     const outputEnvVarNames = new Map<string, string>([
       ["teamsAppId", "MY_TEAMS_APP_ID"],
@@ -279,7 +286,7 @@ describe("teamsApp/create", async () => {
     vi.spyOn(teamsDevPortalClient, "getApp").mockImplementation(() => {
       throw new Error("404");
     });
-    vi.spyOn(teamsDevPortalClient, "createApp").mockResolvedValue(appDef);
+    vi.spyOn(teamsDevPortalClient, "createApp").mockResolvedValue(nativeApp);
 
     const outputEnvVarNames = new Map<string, string>([["teamsAppId", "TEAMS_APP_ID"]]);
 
@@ -290,5 +297,38 @@ describe("teamsApp/create", async () => {
       chai.assert.equal(result.value.get("TEAMS_APP_ID"), appDef.appId);
       chai.assert.equal(result.value.get("TEAMS_APP_TENANT_ID"), appDef.tenantId);
     }
+  });
+
+  it("AC-02: writes the canonical output to a custom destination", async () => {
+    vi.spyOn(teamsDevPortalClient, "createApp").mockResolvedValue(nativeApp);
+    const result = (
+      await teamsAppDriver.execute(
+        { name: "example" },
+        mockedDriverContext,
+        new Map([["appId", "MY_APP"]])
+      )
+    ).result;
+    expect(result.isOk()).toBe(true);
+    if (result.isOk()) {
+      expect(result.value.get("MY_APP")).toBe(appId);
+      expect(result.value.has("TEAMS_APP_ID")).toBe(false);
+      expect(result.value.has("APP_MANIFEST_ID")).toBe(false);
+    }
+  });
+
+  it("AC-04: rejects both output names before calling DP", async () => {
+    const create = vi.spyOn(teamsDevPortalClient, "createApp");
+    const result = (
+      await teamsAppDriver.execute(
+        { name: "example" },
+        mockedDriverContext,
+        new Map([
+          ["appId", "APP_ID"],
+          ["teamsAppId", "TEAMS_APP_ID"],
+        ])
+      )
+    ).result;
+    expect(result.isErr()).toBe(true);
+    expect(create).not.toHaveBeenCalled();
   });
 });

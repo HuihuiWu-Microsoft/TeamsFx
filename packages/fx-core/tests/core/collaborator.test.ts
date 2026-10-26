@@ -885,7 +885,8 @@ describe("Collaborator APIs for V3", () => {
       }
     });
 
-    it("happy path cli: get from dotenv", async () => {
+    it("AC-09: resolves the canonical resource ID from a CLI dotenv file", async () => {
+      const resourceId = "11111111-1111-4111-8111-111111111111";
       const inputsCli: InputsWithProjectPath = {
         platform: Platform.CLI,
         projectPath: path.join(os.tmpdir(), randomAppName()),
@@ -893,16 +894,15 @@ describe("Collaborator APIs for V3", () => {
       };
       vi.spyOn(CollaborationUtil, "loadDotEnvFile").mockResolvedValue(
         ok({
-          [CollaborationConstants.TeamsAppIdEnv]: "teamsAppId",
+          APP_ID: resourceId,
           [CollaborationConstants.AadObjectIdEnv]: "aadObjectId",
         })
       );
       const result = await CollaborationUtil.getTeamsAppIdAndAadObjectId(inputsCli);
       assert.isTrue(result.isOk());
-      console.log(result);
       if (result.isOk()) {
         const appId = result.value;
-        assert.equal(appId.teamsAppId, "teamsAppId");
+        assert.equal(appId.teamsAppId, resourceId);
         assert.equal(appId.aadObjectId, "aadObjectId");
       }
     });

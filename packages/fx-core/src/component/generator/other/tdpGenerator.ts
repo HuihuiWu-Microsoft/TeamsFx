@@ -14,6 +14,7 @@ import { DefaultTemplateGenerator } from "../defaultGenerator";
 import { Generator } from "../generator";
 import { TemplateInfo } from "../templates/templateInfo";
 import { TemplateNames } from "../templates/templateNames";
+import { getTemplateReplaceMap } from "../templates/templateReplaceMap";
 
 /**
  * TdpGenerator is used to generate code from TDP app definition.
@@ -81,6 +82,7 @@ export class TdpGenerator extends DefaultTemplateGenerator {
               inputs.targetFramework,
               inputs.placeProjectFileInSolutionDir === "true"
             ),
+            ...getTemplateReplaceMap(inputs),
             IsNet8Framework: isNet8 ? "true" : "",
           },
         },

@@ -21,6 +21,7 @@ import {
 import fs from "fs-extra";
 import * as path from "path";
 import semver from "semver";
+import isUUID from "validator/lib/isUUID";
 import { getLocalizedString } from "../common/localizeUtils";
 import { InputValidationError } from "../error";
 import { QuestionNames } from "../question/constants";
@@ -33,7 +34,13 @@ import {
   DEFAULT_DEVELOPER,
   getBotsTplBasedOnVersion,
 } from "./driver/teamsApp/constants";
-import { AppDefinition } from "./driver/teamsApp/interfaces/appdefinitions/appDefinition";
+import {
+  getAppCapabilities,
+  getAppManifestId,
+  getAppResourceId,
+  DevPortalAppResponse,
+} from "./utils/appInfo";
+import { appIdentityError, defaultAppIdEnvName, resolveAppResourceId } from "./utils/appIdentity";
 import { manifestUtils } from "./driver/teamsApp/utils/ManifestUtils";
 import { envUtil } from "./utils/envUtil";
 import { pathUtils } from "./utils/pathUtils";
@@ -49,7 +56,7 @@ export const answerToReplaceMessageExtensionBotId = "messageExtension";
 export class DeveloperPortalScaffoldUtils {
   async updateFilesForTdp(
     ctx: Context,
-    appDefinition: AppDefinition,
+    appDefinition: DevPortalAppResponse,
     inputs: Inputs
   ): Promise<Result<undefined, FxError>> {
     if (!inputs.projectPath) {
@@ -60,17 +67,58 @@ export class DeveloperPortalScaffoldUtils {
       return err(new InputValidationError("tokenProvider", "undefined"));
     }
 
+    const resourceId = getAppResourceId(appDefinition);
+    const manifestId = getAppManifestId(appDefinition);
+    if ("appProfile" in appDefinition) {
+      if (!resourceId || !manifestId || !isUUID(resourceId) || !isUUID(manifestId)) {
+        return err(appIdentityError("appId / applicationManifest.id"));
+      }
+      const identity = resolveAppResourceId({
+        APP_ID: resourceId,
+        ...(manifestId !== resourceId ? { APP_MANIFEST_ID: manifestId } : {}),
+      });
+      if (identity.isErr()) return err(identity.error);
+    }
     const manifestRes = await updateManifest(ctx, appDefinition, inputs);
     if (manifestRes.isErr()) {
       return err(manifestRes.error);
     }
 
-    const envRes = await updateEnv(appDefinition.teamsAppId!, inputs.projectPath);
+    if (manifestId !== resourceId) {
+      await updateRuntimeManifestId(inputs.projectPath);
+    }
+
+    const envRes = await updateEnv(resourceId!, inputs.projectPath, manifestId);
     if (envRes.isErr()) {
       return err(envRes.error);
     }
 
     return ok(undefined);
+  }
+}
+
+async function updateRuntimeManifestId(projectPath: string): Promise<void> {
+  const runtimeFiles = [
+    path.join(".vscode", "launch.json"),
+    path.join(".vscode", "tasks.json"),
+    path.join(
+      `.${process.env.TEAMSFX_NEW_PROJECT_TYPE_NAME ?? "M365Agent"}`,
+      "launchSettings.json"
+    ),
+    "launchSettings.json",
+  ];
+  for (const file of runtimeFiles) {
+    const filePath = path.join(projectPath, file);
+    let content: string;
+    try {
+      content = await fs.readFile(filePath, "utf8");
+    } catch (error) {
+      // Not every template has every launch surface.
+      if (error instanceof Error && "code" in error && error.code === "ENOENT") continue;
+      throw error;
+    }
+    const updated = content.replace(/\$\{\{(local:)?APP_ID\}\}/g, "${{$1APP_MANIFEST_ID}}");
+    if (updated !== content) await fs.writeFile(filePath, updated);
   }
 }
 
@@ -81,11 +129,11 @@ enum TabUrlType {
 
 async function updateManifest(
   ctx: Context,
-  appDefinition: AppDefinition,
+  appDefinition: DevPortalAppResponse,
   inputs: Inputs
 ): Promise<Result<undefined, FxError>> {
   const res = await appStudio.getAppPackage(
-    appDefinition.teamsAppId!,
+    getAppResourceId(appDefinition)!,
     ctx.tokenProvider!.m365TokenProvider,
     ctx.logProvider
   );
@@ -97,9 +145,22 @@ async function updateManifest(
   if (!appPackage.manifest) {
     const msg = getLocalizedString(
       "core.developerPortal.scaffold.CannotFindManifest",
-      appDefinition.teamsAppId
+      getAppResourceId(appDefinition)
     );
     return err(new UserError(CoordinatorSource, "CouldNotFoundManifest", msg, msg));
+  }
+
+  const manifestId = getAppManifestId(appDefinition);
+  if ("appProfile" in appDefinition) {
+    const downloaded: unknown = JSON.parse(appPackage.manifest.toString("utf8"));
+    if (
+      typeof downloaded !== "object" ||
+      downloaded === null ||
+      !("id" in downloaded) ||
+      downloaded.id !== manifestId
+    ) {
+      return err(appIdentityError("applicationManifest.id / manifest.json"));
+    }
   }
 
   const colorFilePath = path.join(inputs.projectPath!, appPackageFolderName, colorFileName);
@@ -135,7 +196,10 @@ async function updateManifest(
 
   // manifest
   const manifest = JSON.parse(appPackage.manifest.toString("utf8")) as TeamsAppManifest;
-  manifest.id = "${{TEAMS_APP_ID}}";
+  manifest.id =
+    manifestId !== getAppResourceId(appDefinition)
+      ? "${{APP_MANIFEST_ID}}"
+      : `\${{${defaultAppIdEnvName()}}}`;
 
   // manifest: tab
   const tabs = manifest.staticTabs;
@@ -208,7 +272,7 @@ async function updateManifest(
     manifest.webApplicationInfo = existingManifestTemplate.webApplicationInfo;
     if (
       existingManifestTemplate.supportsChannelFeatures &&
-      "supportsChannelFeatures" in appDefinition
+      getAppCapabilities(appDefinition).supportsChannelFeatures
     ) {
       manifest.supportsChannelFeatures = existingManifestTemplate.supportsChannelFeatures;
     }
@@ -296,18 +360,19 @@ async function updateManifest(
 // If the template does not have .env.local, write to .env.dev instead.
 export async function updateEnv(
   appId: string,
-  projectPath: string
+  projectPath: string,
+  manifestId?: string
 ): Promise<Result<undefined, FxError>> {
+  const variables = {
+    [defaultAppIdEnvName()]: appId,
+    ...(manifestId && manifestId !== appId ? { APP_MANIFEST_ID: manifestId } : {}),
+  };
   const localEnvFilePathRes = await pathUtils.getEnvFilePath.bind(pathUtils)(projectPath, "local");
   if (localEnvFilePathRes.isErr()) return err(localEnvFilePathRes.error);
   if (!!localEnvFilePathRes.value && (await fs.pathExists(localEnvFilePathRes.value))) {
-    return await envUtil.writeEnv.bind(envUtil)(projectPath, "local", {
-      TEAMS_APP_ID: appId,
-    });
+    return await envUtil.writeEnv.bind(envUtil)(projectPath, "local", variables);
   } else {
-    return await envUtil.writeEnv.bind(envUtil)(projectPath, "dev", {
-      TEAMS_APP_ID: appId,
-    });
+    return await envUtil.writeEnv.bind(envUtil)(projectPath, "dev", variables);
   }
 }
 

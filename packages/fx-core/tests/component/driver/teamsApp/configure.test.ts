@@ -9,6 +9,7 @@ import { v4 as uuid } from "uuid";
 import { teamsDevPortalClient } from "../../../../src/client/teamsDevPortalClientProvider";
 import { SovereignCloudEnvironment } from "../../../../src/common/accountUtils";
 import { FeatureFlagName } from "../../../../src/common/featureFlags";
+import { pathUtils } from "../../../../src/component/utils/pathUtils";
 import { ConfigureTeamsAppDriver } from "../../../../src/component/driver/teamsApp/configure";
 import { AppStudioError } from "../../../../src/component/driver/teamsApp/errors";
 import { ConfigureTeamsAppArgs } from "../../../../src/component/driver/teamsApp/interfaces/ConfigureTeamsAppArgs";
@@ -32,10 +33,15 @@ describe("teamsApp/update", async () => {
     appName: "fake",
     teamsAppId: uuid(),
     userList: [],
+    tenantId: "tenantId",
+    updatedAt: "2026-10-21T00:00:00Z",
   };
+  const nativeApp = { appId: appDef.teamsAppId!, appProfile: {} };
 
   beforeEach(() => {
     process.env[FeatureFlagName.NewDeveloperPortalApis] = "true";
+    vi.spyOn(pathUtils, "getYmlFilePath").mockReturnValue(undefined);
+    vi.spyOn(teamsDevPortalClient, "getAppLastModified").mockResolvedValue(appDef.updatedAt!);
   });
 
   afterEach(() => {
@@ -96,7 +102,7 @@ describe("teamsApp/update", async () => {
       appPackagePath: "fakePath",
     };
 
-    vi.spyOn(teamsDevPortalClient, "updateApp").mockResolvedValue(appDef);
+    vi.spyOn(teamsDevPortalClient, "updateApp").mockResolvedValue(nativeApp);
     vi.spyOn(fs, "pathExists").mockResolvedValue(true);
     vi.spyOn(fs, "readFile").mockImplementation(async () => {
       const zip = new AdmZip();
@@ -192,18 +198,21 @@ describe("teamsApp/update", async () => {
     chai.assert.isTrue(result.isErr());
   });
 
-  it("happy path", async () => {
+  it("AC-14: updates a split-ID resource without changing the package manifest ID", async () => {
     const args: ConfigureTeamsAppArgs = {
       appPackagePath: "fakePath",
     };
 
     const appId = uuid();
     const resourceAppId = uuid();
-    const updateAppSpy = vi.spyOn(teamsDevPortalClient, "updateApp").mockResolvedValue(appDef);
-    vi.spyOn(teamsDevPortalClient, "getApp").mockResolvedValue({
-      ...appDef,
+    restoreEnv = mockedEnv({ APP_ID: resourceAppId, APP_MANIFEST_ID: appId });
+    const updateAppSpy = vi.spyOn(teamsDevPortalClient, "updateApp").mockResolvedValue({
       appId: resourceAppId,
-      teamsAppId: appId,
+      appProfile: { appDetails: { applicationManifest: { id: appId } } },
+    });
+    vi.spyOn(teamsDevPortalClient, "getApp").mockResolvedValue({
+      appId: resourceAppId,
+      appProfile: { appDetails: { applicationManifest: { id: appId } } },
     });
     vi.spyOn(fs, "pathExists").mockResolvedValue(true);
     vi.spyOn(fs, "readFile").mockImplementation(async () => {
@@ -234,10 +243,11 @@ describe("teamsApp/update", async () => {
     });
 
     const result = (await teamsAppDriver.execute(args, mockedDriverContext)).result;
-    console.log(JSON.stringify(result));
     chai.assert.isTrue(result.isOk());
     expect(updateAppSpy).toHaveBeenCalledOnce();
     expect(updateAppSpy.mock.calls[0][1]).toBe(resourceAppId);
+    const uploaded = new AdmZip(updateAppSpy.mock.calls[0][2]);
+    expect(JSON.parse(uploaded.readAsText(Constants.MANIFEST_FILE)).id).toBe(appId);
   });
 
   it("uses legacy app package import by default", async () => {
@@ -262,13 +272,13 @@ describe("teamsApp/update", async () => {
     expect(updateAppSpy).not.toHaveBeenCalled();
   });
 
-  it("execute", async () => {
+  it("AC-08: updates an existing equal-ID package without new YAML inputs", async () => {
     const args: ConfigureTeamsAppArgs = {
       appPackagePath: "fakePath",
     };
 
-    vi.spyOn(teamsDevPortalClient, "updateApp").mockResolvedValue(appDef);
-    vi.spyOn(teamsDevPortalClient, "getApp").mockResolvedValue(appDef);
+    vi.spyOn(teamsDevPortalClient, "updateApp").mockResolvedValue(nativeApp);
+    vi.spyOn(teamsDevPortalClient, "getApp").mockResolvedValue(nativeApp);
     vi.spyOn(fs, "pathExists").mockResolvedValue(true);
     vi.spyOn(fs, "readFile").mockImplementation(async () => {
       const zip = new AdmZip();

@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT license.
+
 /**
  * @author Yuqi Zhou <yuqzho@microsoft.com>
  */
@@ -5,6 +8,7 @@ import { err, Inputs, ok, Platform, TeamsAppManifest, UserError } from "@microso
 import fs from "fs-extra";
 import { merge } from "lodash";
 import path from "path";
+import os from "os";
 import { chai, vi } from "vitest";
 import { createContext, setTools } from "../../src/common/globalVars";
 import * as tdpUtils from "../../src/component/developerPortalScaffoldUtils";
@@ -37,8 +41,134 @@ import {
   TabCapabilityOptions,
 } from "../../src/question/scaffold/vsc/CapabilityOptions";
 import { MockedAzureAccountProvider, MockedM365Provider, MockTools } from "../core/utils";
+import { FeatureFlagName } from "../../src/common/featureFlags";
 
 vi.mock("../../src/component/driver/teamsApp/appStudio");
+
+describe("DP native handoff identity", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
+    vi.unstubAllEnvs();
+  });
+
+  for (const split of [false, true]) {
+    it(`AC-13: ${split ? "split" : "equal"} handoff preserves launch URLs and resource bindings`, async () => {
+      vi.stubEnv(FeatureFlagName.NewDeveloperPortalApis, "true");
+      vi.stubEnv("TEAMSFX_NEW_PROJECT_TYPE_NAME", "M365Agent");
+      const projectPath = await fs.mkdtemp(path.join(os.tmpdir(), "dp-handoff-"));
+      try {
+        const resourceId = "11111111-1111-4111-8111-111111111111";
+        const manifestId = split ? "22222222-2222-4222-8222-222222222222" : resourceId;
+        const manifest = new TeamsAppManifest();
+        manifest.id = manifestId;
+        const ctx = createContext();
+        ctx.tokenProvider = new MockTools().tokenProvider;
+        vi.mocked(appStudio.getAppPackage).mockResolvedValue(
+          ok({ manifest: Buffer.from(JSON.stringify(manifest)) })
+        );
+        vi.spyOn(manifestUtils, "_readAppManifest").mockResolvedValue(ok(manifest));
+        vi.spyOn(pathUtils, "getEnvFilePath").mockResolvedValue(
+          ok(path.join(projectPath, "env", ".env.local"))
+        );
+        vi.spyOn(envUtil, "writeEnv").mockResolvedValue(ok(undefined));
+        await fs.ensureDir(path.join(projectPath, "appPackage"));
+        const runtimeFiles = [
+          path.join(".vscode", "launch.json"),
+          path.join(".vscode", "tasks.json"),
+          path.join(".M365Agent", "launchSettings.json"),
+          "launchSettings.json",
+        ];
+        const urls = [
+          "https://teams.microsoft.com/l/app/${{local:APP_ID}}?installAppPackage=true&webjoin=true&${account-hint}",
+          "teams.microsoft.com/l/app/${{APP_ID}}?installAppPackage=true",
+        ];
+        for (const file of runtimeFiles) {
+          await fs.outputFile(path.join(projectPath, file), JSON.stringify({ urls }));
+        }
+        const lifecycle = "writeToEnvironmentFile:\n  appId: APP_ID\n";
+        await fs.outputFile(path.join(projectPath, "m365agents.yml"), lifecycle);
+        const result = await developerPortalScaffoldUtils.updateFilesForTdp(
+          ctx,
+          {
+            appId: resourceId,
+            appProfile: { appDetails: { applicationManifest: { id: manifestId } } },
+          },
+          { platform: Platform.VSCode, projectPath }
+        );
+        chai.assert.isTrue(result.isOk());
+        for (const file of runtimeFiles) {
+          chai.assert.equal(
+            await fs.readFile(path.join(projectPath, file), "utf8"),
+            JSON.stringify({ urls }).replace(/APP_ID/g, split ? "APP_MANIFEST_ID" : "APP_ID")
+          );
+        }
+        chai.assert.equal(
+          await fs.readFile(path.join(projectPath, "m365agents.yml"), "utf8"),
+          lifecycle
+        );
+      } finally {
+        await fs.remove(projectPath);
+      }
+    });
+
+    it(`${split ? "AC-13" : "AC-11"}: persists ${split ? "two" : "one"} IDs at handoff`, async () => {
+      vi.stubEnv(FeatureFlagName.NewDeveloperPortalApis, "true");
+      const resourceId = "11111111-1111-4111-8111-111111111111";
+      const manifestId = split ? "22222222-2222-4222-8222-222222222222" : resourceId;
+      const manifest = new TeamsAppManifest();
+      manifest.id = manifestId;
+      const ctx = createContext();
+      ctx.tokenProvider = new MockTools().tokenProvider;
+      vi.mocked(appStudio.getAppPackage).mockResolvedValue(
+        ok({ manifest: Buffer.from(JSON.stringify(manifest)) })
+      );
+      vi.spyOn(manifestUtils, "_readAppManifest").mockResolvedValue(ok(manifest));
+      const writeFile = vi.spyOn(fs, "writeFile").mockResolvedValue();
+      vi.spyOn(pathUtils, "getEnvFilePath").mockResolvedValue(ok("local.env"));
+      vi.spyOn(fs, "pathExists").mockResolvedValue(true);
+      const writeEnv = vi.spyOn(envUtil, "writeEnv").mockResolvedValue(ok(undefined));
+      const result = await developerPortalScaffoldUtils.updateFilesForTdp(
+        ctx,
+        {
+          appId: resourceId,
+          appProfile: { appDetails: { applicationManifest: { id: manifestId } } },
+        },
+        { platform: Platform.VSCode, projectPath: "project-path" }
+      );
+      chai.assert.isTrue(result.isOk());
+      chai.assert.equal(vi.mocked(appStudio.getAppPackage).mock.calls[0][0], resourceId);
+      chai.assert.deepEqual(writeEnv.mock.calls[0][2], {
+        APP_ID: resourceId,
+        ...(split ? { APP_MANIFEST_ID: manifestId } : {}),
+      });
+      const output = JSON.parse(String(writeFile.mock.calls[0][1]));
+      chai.assert.equal(output.id, split ? "${{APP_MANIFEST_ID}}" : "${{APP_ID}}");
+    });
+  }
+
+  it("AC-18: rejects inconsistent downloaded identity before writing files", async () => {
+    vi.stubEnv(FeatureFlagName.NewDeveloperPortalApis, "true");
+    const resourceId = "11111111-1111-4111-8111-111111111111";
+    const manifestId = "22222222-2222-4222-8222-222222222222";
+    const ctx = createContext();
+    ctx.tokenProvider = new MockTools().tokenProvider;
+    vi.mocked(appStudio.getAppPackage).mockResolvedValue(
+      ok({ manifest: Buffer.from(JSON.stringify({ id: resourceId })) })
+    );
+    const writeFile = vi.spyOn(fs, "writeFile").mockResolvedValue();
+    const result = await developerPortalScaffoldUtils.updateFilesForTdp(
+      ctx,
+      {
+        appId: resourceId,
+        appProfile: { appDetails: { applicationManifest: { id: manifestId } } },
+      },
+      { platform: Platform.VSCode, projectPath: "project-path" }
+    );
+    chai.assert.isTrue(result.isErr());
+    chai.assert.equal(writeFile.mock.calls.length, 0);
+  });
+});
 
 describe("developPortalScaffoldUtils", () => {
   setTools(new MockTools());

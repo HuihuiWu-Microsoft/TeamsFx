@@ -5,7 +5,12 @@ TEAMSFX_ENV=dev
 APP_NAME_SUFFIX=dev
 
 # Generated during provision, you can also add your own variables.
+{{#NewDeveloperPortalApis}}
+APP_ID=
+{{/NewDeveloperPortalApis}}
+{{^NewDeveloperPortalApis}}
 TEAMS_APP_ID=
+{{/NewDeveloperPortalApis}}
 
 {{#McpAuth}}
 MCP_DA_AUTH_ID=

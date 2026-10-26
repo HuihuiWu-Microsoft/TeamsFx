@@ -16,6 +16,7 @@ import { WrapDriverContext } from "../util/wrapUtil";
 import * as appStudio from "./appStudio";
 import { AppStudioError } from "./errors";
 import { SyncManifestArgs } from "./interfaces/SyncManifest";
+import { appIdentityError, getAppIdEnvName, resolveAppResourceId } from "../../utils/appIdentity";
 import { AppStudioResultFactory } from "./results";
 import { manifestUtils } from "./utils/ManifestUtils";
 
@@ -78,6 +79,16 @@ export class SyncManifestDriver implements StepDriver {
       );
     }
     const newManifest = JSON.parse(appPackage.manifest.toString("utf8"));
+    const expectedManifestId = res.value.get("manifestId");
+    if (
+      expectedManifestId &&
+      (typeof newManifest !== "object" ||
+        newManifest === null ||
+        !("id" in newManifest) ||
+        newManifest.id !== expectedManifestId)
+    ) {
+      return err(appIdentityError("APP_MANIFEST_ID / manifest.id"));
+    }
     // save the new manifest file.
     const timeStamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..+/, "");
     const manifestFileName = `manifest.${args.env}.${teamsAppId}.json`;
@@ -179,12 +190,26 @@ export class SyncManifestDriver implements StepDriver {
       return err(yamlProjectModel.error);
     }
     const projectModel = yamlProjectModel.value;
+    if (envRes.value.APP_MANIFEST_ID !== undefined) {
+      const create = projectModel.provision?.driverDefs.find(
+        (driver) => driver.uses === "teamsApp/create"
+      );
+      const identity = resolveAppResourceId(
+        envRes.value,
+        getAppIdEnvName(create?.writeToEnvironmentFile)
+      );
+      if (identity.isErr()) return err(identity.error);
+    }
     let teamsAppId = args.teamsAppId;
     if (!teamsAppId) {
       for (const action of projectModel.provision?.driverDefs ?? []) {
         if (action.uses === "teamsApp/create") {
-          const teamsAppIdKeyName = action.writeToEnvironmentFile?.teamsAppId || "TEAMS_APP_ID";
-          teamsAppId = envRes.value[teamsAppIdKeyName];
+          const teamsAppIdKeyName =
+            action.writeToEnvironmentFile?.appId ?? action.writeToEnvironmentFile?.teamsAppId;
+          teamsAppId =
+            (teamsAppIdKeyName ? envRes.value[teamsAppIdKeyName] : undefined) ||
+            envRes.value.APP_ID ||
+            envRes.value.TEAMS_APP_ID;
         }
       }
       if (!teamsAppId) {
@@ -214,12 +239,14 @@ export class SyncManifestDriver implements StepDriver {
     } else {
       manifestTemplatePath = path.join(args.projectPath, yamlManifestPath);
     }
-    return ok(
-      new Map([
-        ["teamsAppId", teamsAppId],
-        ["manifestTemplatePath", manifestTemplatePath],
-      ])
-    );
+    const result = new Map([
+      ["teamsAppId", teamsAppId],
+      ["manifestTemplatePath", manifestTemplatePath],
+    ]);
+    if (envRes.value.APP_MANIFEST_ID) {
+      result.set("manifestId", envRes.value.APP_MANIFEST_ID);
+    }
+    return ok(result);
   }
 
   // Check if the value matches the template with placeholders and return the placeholder map.
