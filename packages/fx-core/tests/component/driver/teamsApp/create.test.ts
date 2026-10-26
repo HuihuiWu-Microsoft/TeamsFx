@@ -180,6 +180,56 @@ describe("teamsApp/create", async () => {
     }
   });
 
+  it.each([
+    { responseId: "", savedId: undefined, manifestId: appId, savedManifestId: undefined },
+    { responseId: "invalid", savedId: undefined, manifestId: appId, savedManifestId: undefined },
+    { responseId: uuid(), savedId: appId, manifestId: appId, savedManifestId: undefined },
+    { responseId: appId, savedId: appId, manifestId: uuid(), savedManifestId: undefined },
+    { responseId: appId, savedId: appId, manifestId: appId, savedManifestId: uuid() },
+  ])("AC-04/AC-18: rejects inconsistent resource or manifest identity (%j)", async (test) => {
+    restoreEnv = mockedEnv({
+      APP_ID: test.savedId,
+      TEAMS_APP_ID: undefined,
+      APP_MANIFEST_ID: test.savedManifestId,
+    });
+    const response = {
+      appId: test.responseId,
+      appProfile: { appDetails: { applicationManifest: { id: test.manifestId } } },
+    };
+    const create = vi.spyOn(teamsDevPortalClient, "createApp").mockResolvedValue(response);
+    vi.spyOn(teamsDevPortalClient, "getApp").mockResolvedValue(response);
+    const result = (await teamsAppDriver.execute({ name: "identity" }, mockedDriverContext)).result;
+    expect(result.isErr()).toBe(true);
+    if (test.savedId) expect(create).not.toHaveBeenCalled();
+  });
+
+  it("AC-04: invalid selected state fails before any DP mutation", async () => {
+    restoreEnv = mockedEnv({ APP_ID: "invalid", TEAMS_APP_ID: appId });
+    const create = vi.spyOn(teamsDevPortalClient, "createApp");
+    const get = vi.spyOn(teamsDevPortalClient, "getApp");
+    const result = (await teamsAppDriver.execute({ name: "identity" }, mockedDriverContext)).result;
+    expect(result.isErr()).toBe(true);
+    expect(create).not.toHaveBeenCalled();
+    expect(get).not.toHaveBeenCalled();
+  });
+
+  it("AC-10: propagates authenticated tenant lookup failure without writing outputs", async () => {
+    const failure = new UserError("test", "TenantLookupFailed", "tenant unavailable");
+    vi.mocked(mockedDriverContext.m365TokenProvider.getJsonObject).mockResolvedValue(err(failure));
+    vi.spyOn(teamsDevPortalClient, "createApp").mockResolvedValue(nativeApp);
+    const result = (await teamsAppDriver.execute({ name: "identity" }, mockedDriverContext)).result;
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) expect(result.error).toBe(failure);
+  });
+
+  it("AC-10: legacy responses without a tenant cannot produce successful outputs", async () => {
+    delete process.env[FeatureFlagName.NewDeveloperPortalApis];
+    restoreEnv = mockedEnv({ TEAMS_APP_ID: appId });
+    vi.spyOn(teamsDevPortalClient, "getApp").mockResolvedValue({ teamsAppId: appId });
+    const result = (await teamsAppDriver.execute({ name: "identity" }, mockedDriverContext)).result;
+    expect(result.isErr()).toBe(true);
+  });
+
   it("does not create a replacement when existing app lookup fails", async () => {
     const args: CreateTeamsAppArgs = {
       name: appDef.appName!,

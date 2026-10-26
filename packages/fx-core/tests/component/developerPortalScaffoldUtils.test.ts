@@ -9,7 +9,7 @@ import fs from "fs-extra";
 import { merge } from "lodash";
 import path from "path";
 import os from "os";
-import { chai, vi } from "vitest";
+import { chai, expect, vi } from "vitest";
 import { createContext, setTools } from "../../src/common/globalVars";
 import * as tdpUtils from "../../src/component/developerPortalScaffoldUtils";
 import {
@@ -51,6 +51,71 @@ describe("DP native handoff identity", () => {
     vi.clearAllMocks();
     vi.unstubAllEnvs();
   });
+
+  it.each([
+    { appId: "", manifestId: "22222222-2222-4222-8222-222222222222", enabled: "true" },
+    { appId: "invalid", manifestId: "22222222-2222-4222-8222-222222222222", enabled: "true" },
+    { appId: "11111111-1111-4111-8111-111111111111", manifestId: "", enabled: "true" },
+    { appId: "11111111-1111-4111-8111-111111111111", manifestId: "invalid", enabled: "true" },
+    {
+      appId: "11111111-1111-4111-8111-111111111111",
+      manifestId: "22222222-2222-4222-8222-222222222222",
+      enabled: "false",
+    },
+  ])(
+    "AC-15/AC-18: rejects invalid handoff identity before downloading (%j)",
+    async ({ appId, manifestId, enabled }) => {
+      vi.stubEnv(FeatureFlagName.NewDeveloperPortalApis, enabled);
+      const ctx = createContext();
+      ctx.tokenProvider = new MockTools().tokenProvider;
+      const result = await developerPortalScaffoldUtils.updateFilesForTdp(
+        ctx,
+        { appId, appProfile: { appDetails: { applicationManifest: { id: manifestId } } } },
+        { platform: Platform.VSCode, projectPath: "project-path" }
+      );
+      expect(result.isErr()).toBe(true);
+      expect(appStudio.getAppPackage).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each([false, true])(
+    "AC-13: runtime bindings preserve unchanged files and surface read failures (failure=%s)",
+    async (failure) => {
+      vi.stubEnv(FeatureFlagName.NewDeveloperPortalApis, "true");
+      const ctx = createContext();
+      ctx.tokenProvider = new MockTools().tokenProvider;
+      const manifest = new TeamsAppManifest();
+      manifest.id = "22222222-2222-4222-8222-222222222222";
+      vi.mocked(appStudio.getAppPackage).mockResolvedValue(
+        ok({ manifest: Buffer.from(JSON.stringify(manifest)) })
+      );
+      vi.spyOn(manifestUtils, "_readAppManifest").mockResolvedValue(ok(manifest));
+      const write = vi.spyOn(fs, "writeFile").mockResolvedValue();
+      const textFiles: { readFile(file: string, encoding: "utf8"): Promise<string> } = fs;
+      const read = vi.spyOn(textFiles, "readFile");
+      const error = Object.assign(new Error("permission denied"), { code: "EACCES" });
+      if (failure) read.mockRejectedValue(error);
+      else read.mockResolvedValue('{ "configurations": [] }');
+      vi.spyOn(pathUtils, "getEnvFilePath").mockResolvedValue(ok("local.env"));
+      vi.spyOn(fs, "pathExists").mockImplementation(async () => true);
+      const writeEnv = vi.spyOn(envUtil, "writeEnv").mockResolvedValue(ok(undefined));
+      const result = developerPortalScaffoldUtils.updateFilesForTdp(
+        ctx,
+        {
+          appId: "11111111-1111-4111-8111-111111111111",
+          appProfile: { appDetails: { applicationManifest: { id: manifest.id } } },
+        },
+        { platform: Platform.VSCode, projectPath: "project-path" }
+      );
+      if (failure) {
+        await expect(result).rejects.toBe(error);
+        expect(writeEnv).not.toHaveBeenCalled();
+      } else {
+        expect((await result).isOk()).toBe(true);
+      }
+      expect(write).toHaveBeenCalledTimes(1);
+    }
+  );
 
   for (const split of [false, true]) {
     it(`AC-13: ${split ? "split" : "equal"} handoff preserves launch URLs and resource bindings`, async () => {

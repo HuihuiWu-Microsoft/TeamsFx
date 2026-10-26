@@ -2,16 +2,52 @@
 // Licensed under the MIT license.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { err, ok, UserError } from "@microsoft/teamsfx-api";
 import { FeatureFlagName } from "../../src/common/featureFlags";
-import { getAppIdEnvName, resolveAppResourceId } from "../../src/component/utils/appIdentity";
+import {
+  getAppIdEnvName,
+  getAppTenantId,
+  resolveAppResourceId,
+  resolveProjectAppResourceId,
+} from "../../src/component/utils/appIdentity";
 import { Validator } from "../../src/component/configManager/validator";
+import { pathUtils } from "../../src/component/utils/pathUtils";
+import { metadataUtil } from "../../src/component/utils/metadataUtil";
+import { MockedM365Provider } from "../core/utils";
 
 const resourceId = "11111111-1111-4111-8111-111111111111";
 const manifestId = "22222222-2222-4222-8222-222222222222";
 
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
+});
 
 describe("DP identity compatibility", () => {
+  it.each([undefined, null, "", 42])(
+    "AC-10: missing or invalid tenant claim fails explicitly (%j)",
+    async (tid) => {
+      const provider = new MockedM365Provider();
+      vi.spyOn(provider, "getJsonObject").mockResolvedValue(ok({ tid }));
+      expect((await getAppTenantId(provider)).isErr()).toBe(true);
+    }
+  );
+
+  it("AC-10: tenant lookup preserves the authentication error", async () => {
+    const provider = new MockedM365Provider();
+    const error = new UserError("test", "AuthenticationFailed", "authentication failed");
+    vi.spyOn(provider, "getJsonObject").mockResolvedValue(err(error));
+    expect((await getAppTenantId(provider))._unsafeUnwrapErr()).toBe(error);
+  });
+
+  it("AC-04: project parse errors cannot silently fall back to environment IDs", async () => {
+    const error = new UserError("test", "InvalidProject", "invalid project");
+    vi.spyOn(pathUtils, "getYmlFilePath").mockReturnValue("m365agents.yml");
+    vi.spyOn(metadataUtil, "parse").mockResolvedValue(err(error));
+    expect(
+      (await resolveProjectAppResourceId("project", { APP_ID: resourceId }))._unsafeUnwrapErr()
+    ).toBe(error);
+  });
   it("AC-03: falls back to the legacy ID without modifying environment state", () => {
     const env = { APP_ID: "", TEAMS_APP_ID: resourceId };
     expect(resolveAppResourceId(env)._unsafeUnwrap()).toBe(resourceId);

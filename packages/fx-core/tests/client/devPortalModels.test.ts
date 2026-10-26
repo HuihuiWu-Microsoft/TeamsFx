@@ -11,6 +11,27 @@ type DraftManifest = NonNullable<
 >;
 
 describe("shared Developer Portal manifest types", () => {
+  it("AC-05/AC-06: absent native IDs stay absent while legacy IDs retain their fallback", () => {
+    for (const appProfile of [
+      null,
+      {},
+      { appDetails: null },
+      { appDetails: { applicationManifest: { id: null } } },
+    ]) {
+      expect(getAppManifestId({ appId: "resource", appProfile })).toBeUndefined();
+    }
+    expect(getAppManifestId({ teamsAppId: "resource" })).toBe("resource");
+    expect(getAppManifestId({ teamsAppId: "resource", appId: "manifest" })).toBe("manifest");
+    expect(getAppManifestId({})).toBeUndefined();
+    expect(
+      getAppCapabilities({
+        appId: "resource",
+        appProfile: {
+          appDetails: { applicationManifest: { activities: null, supportsChannelFeatures: null } },
+        },
+      })
+    ).toMatchObject({ activities: undefined, supportsChannelFeatures: undefined });
+  });
   it("AC-05: derives draft fields from every supported manifest version", () => {
     expectTypeOf<TeamsManifest>().toExtend<DraftManifest>();
     expectTypeOf<{

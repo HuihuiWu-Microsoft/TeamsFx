@@ -12,6 +12,7 @@ import { RetryHandler } from "../../src/common/retryHandler";
 import { AppUser } from "../../src/component/driver/teamsApp/interfaces/appdefinitions/appUser";
 import { Constants } from "../../src/component/driver/teamsApp/constants";
 import { MockTools } from "../core/utils";
+import { AppResponse } from "../../src/client/devPortalModels";
 
 const resourceId = "11111111-1111-4111-8111-111111111111";
 const manifestId = "22222222-2222-4222-8222-222222222222";
@@ -300,6 +301,99 @@ describe("native Developer Portal response contract", () => {
     vi.spyOn(requester, "get").mockResolvedValue({ data: app });
     expect(await teamsDevPortalClient.getApp("token", resourceId)).toBe(app);
   });
+
+  it.each([
+    null,
+    {},
+    { appDetails: null, appAccessControl: null },
+    { appDetails: {}, appAccessControl: {} },
+    { appDetails: { applicationManifest: null }, appAccessControl: { appUsers: null } },
+    { appDetails: { applicationManifest: {} }, appAccessControl: { appUsers: [] } },
+    { appDetails: { applicationManifest: { bots: [] } } },
+    { appDetails: { applicationManifest: { bots: [{ botId: null }] } } },
+  ] satisfies AppResponse["appProfile"][])(
+    "AC-05: missing draft bots and users are treated as absent (%j)",
+    async (appProfile) => {
+      const requester = axios.create();
+      vi.spyOn(devPortalClient, "createRequesterWithToken").mockReturnValue(requester);
+      vi.spyOn(requester, "get").mockResolvedValue({ data: { appId: resourceId, appProfile } });
+      expect(await teamsDevPortalClient.getBotId("token", resourceId)).toBeUndefined();
+      expect(await teamsDevPortalClient.checkPermission("token", resourceId, "missing")).toBe(
+        Constants.PERMISSIONS.noPermission
+      );
+      expect(
+        teamsDevPortalClient.checkUser(
+          { appId: resourceId, appProfile },
+          {
+            aadId: "missing",
+            tenantId: "tenant",
+            isAdministrator: false,
+            displayName: "Missing",
+            userPrincipalName: "missing@example.com",
+          }
+        )
+      ).toBe(false);
+    }
+  );
+
+  it("AC-05: membership checks work for both response shapes independently of the selected API", async () => {
+    const user: AppUser = {
+      aadId: "member",
+      tenantId: "tenant",
+      isAdministrator: false,
+      displayName: "Member",
+      userPrincipalName: "member@example.com",
+    };
+    const app: AppResponse = {
+      appId: resourceId,
+      appProfile: { appAccessControl: { appUsers: [{ ...user, role: "Member" }] } },
+    };
+    const requester = axios.create();
+    vi.spyOn(devPortalClient, "createRequesterWithToken").mockReturnValue(requester);
+    vi.spyOn(requester, "get").mockResolvedValue({ data: app });
+    expect(await teamsDevPortalClient.checkPermission("token", resourceId, "member")).toBe(
+      Constants.PERMISSIONS.operative
+    );
+    for (const flag of ["true", "false"]) {
+      process.env[FeatureFlagName.NewDeveloperPortalApis] = flag;
+      expect(teamsDevPortalClient.checkUser(app, user)).toBe(true);
+      expect(
+        teamsDevPortalClient.checkUser({ teamsAppId: resourceId, userList: [user] }, user)
+      ).toBe(true);
+    }
+  });
+
+  it("AC-05: permission lookup failure never grants access", async () => {
+    const requester = axios.create();
+    vi.spyOn(devPortalClient, "createRequesterWithToken").mockReturnValue(requester);
+    vi.spyOn(requester, "get").mockRejectedValue(new Error("lookup failed"));
+    expect(await teamsDevPortalClient.checkPermission("token", resourceId, "owner")).toBe(
+      Constants.PERMISSIONS.noPermission
+    );
+  });
+
+  it.each([null, {}, { appAccessControl: null }, { appAccessControl: { appUsers: null } }])(
+    "AC-05: ownership updates handle an absent owner list (%j)",
+    async (appProfile) => {
+      const requester = axios.create();
+      vi.spyOn(devPortalClient, "createRequesterWithToken").mockReturnValue(requester);
+      vi.spyOn(requester, "get").mockResolvedValue({ data: { appId: resourceId, appProfile } });
+      const post = vi.spyOn(requester, "post").mockResolvedValue({ status: 200 });
+      const user: AppUser = {
+        aadId: "owner",
+        tenantId: "tenant",
+        isAdministrator: true,
+        displayName: "Owner",
+        userPrincipalName: "owner@example.com",
+      };
+      await teamsDevPortalClient.grantPermission("token", resourceId, user);
+      expect(post.mock.calls[0][1]).toEqual({
+        appUsers: [{ aadId: "owner", tenantId: "tenant", role: "Owner" }],
+      });
+      await teamsDevPortalClient.removePermission("token", resourceId, user);
+      expect(post).toHaveBeenCalledTimes(1);
+    }
+  );
 
   it("AC-05: bot lookup reads the nested draft manifest", async () => {
     const requester = axios.create();

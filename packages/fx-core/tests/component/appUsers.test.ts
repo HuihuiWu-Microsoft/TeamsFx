@@ -9,6 +9,13 @@ import { MockedM365Provider } from "../core/utils";
 
 afterEach(() => vi.restoreAllMocks());
 
+it("AC-09: an absent native user list produces no collaborators or Graph lookups", async () => {
+  vi.spyOn(teamsDevPortalClient, "getUserList").mockResolvedValue(undefined);
+  const graph = vi.spyOn(GraphClient.prototype, "getUserInfoFromId");
+  expect((await getAppUsers("token", "id", new MockedM365Provider()))._unsafeUnwrap()).toEqual([]);
+  expect(graph).not.toHaveBeenCalled();
+});
+
 it("AC-09: enriches native access control without inventing display identities", async () => {
   vi.spyOn(teamsDevPortalClient, "getUserList").mockResolvedValue([
     { aadId: "user-id", tenantId: "tenant-id", role: "Owner" },

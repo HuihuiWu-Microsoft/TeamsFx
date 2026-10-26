@@ -22,7 +22,7 @@ import { ValidateWithTestCasesDriver } from "../../../../src/component/driver/te
 import { InvalidActionInputError, UserCancelError } from "../../../../src/error/common";
 import { MockedM365Provider, MockTools } from "../../../core/utils";
 import { MockedLogProvider, MockedUserInteraction } from "../../../plugins/solution/util";
-import { chai, vi } from "vitest";
+import { chai, expect, vi } from "vitest";
 
 describe("teamsApp/validateWithTestCases", async () => {
   const tools = new MockTools();
@@ -80,6 +80,28 @@ describe("teamsApp/validateWithTestCases", async () => {
     chai.assert.equal(list.mock.calls[0][1], resourceId);
     chai.assert.equal(submit.mock.calls[0][1], resourceId);
   });
+
+  it.each(["invalid resource", "manifest mismatch"])(
+    "AC-04/AC-17: validation rejects %s without submitting a request",
+    async (failure) => {
+      vi.stubEnv("TEAMSFX_NEW_DP_APIS", "true");
+      vi.stubEnv("APP_ID", failure === "invalid resource" ? "invalid" : defaultManifest.id);
+      vi.stubEnv("APP_MANIFEST_ID", "22222222-2222-4222-8222-222222222222");
+      const zip = new AdmZip();
+      zip.addFile(Constants.MANIFEST_FILE, Buffer.from(JSON.stringify(defaultManifest)));
+      vi.spyOn(fs, "pathExists").mockImplementation(async () => true);
+      vi.spyOn(fs, "readFile").mockResolvedValue(zip.toBuffer());
+      const list = vi.spyOn(teamsDevPortalClient, "getAppValidationRequestList");
+      const submit = vi.spyOn(teamsDevPortalClient, "submitAppValidationRequest");
+      const result = await teamsAppDriver.execute(
+        { appPackagePath: "app.zip" },
+        { ...mockedDriverContext, platform: Platform.CLI }
+      );
+      expect(result.result.isErr()).toBe(true);
+      expect(list).not.toHaveBeenCalled();
+      expect(submit).not.toHaveBeenCalled();
+    }
+  );
 
   it("file not found - app package", async () => {
     const args: ValidateWithTestCasesArgs = {

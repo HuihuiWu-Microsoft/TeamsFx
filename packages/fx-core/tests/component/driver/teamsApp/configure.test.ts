@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT license.
 
-import { TeamsAppManifest } from "@microsoft/teamsfx-api";
+import { TeamsAppManifest, UserError, err } from "@microsoft/teamsfx-api";
 import AdmZip from "adm-zip";
 import fs from "fs-extra";
 import mockedEnv from "mocked-env";
@@ -197,6 +197,66 @@ describe("teamsApp/update", async () => {
     const result = (await teamsAppDriver.execute(args, mockedDriverContext)).result;
     chai.assert.isTrue(result.isErr());
   });
+
+  it.each(["invalid resource", "package mismatch", "remote mismatch"])(
+    "AC-04/AC-17: rejects %s before uploading the package",
+    async (failure) => {
+      const resourceId = uuid();
+      const manifestId = failure === "package mismatch" ? uuid() : resourceId;
+      restoreEnv = mockedEnv({
+        APP_ID: failure === "invalid resource" ? "invalid" : resourceId,
+        APP_MANIFEST_ID: undefined,
+        TEAMS_APP_ID: undefined,
+      });
+      const zip = new AdmZip();
+      const manifest = new TeamsAppManifest();
+      manifest.id = manifestId;
+      zip.addFile(Constants.MANIFEST_FILE, Buffer.from(JSON.stringify(manifest)));
+      vi.spyOn(fs, "pathExists").mockImplementation(async () => true);
+      vi.spyOn(fs, "readFile").mockResolvedValue(zip.toBuffer());
+      vi.spyOn(teamsDevPortalClient, "getApp").mockResolvedValue({
+        appId: resourceId,
+        appProfile: { appDetails: { applicationManifest: { id: uuid() } } },
+      });
+      const upload = vi.spyOn(teamsDevPortalClient, "updateApp");
+      const result = (
+        await teamsAppDriver.execute({ appPackagePath: "fakePath" }, mockedDriverContext)
+      ).result;
+      expect(result.isErr()).toBe(true);
+      expect(upload).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each(["tenant lookup", "legacy tenant", "legacy timestamp"])(
+    "AC-10: missing %s cannot produce successful update metadata",
+    async (failure) => {
+      const native = failure === "tenant lookup";
+      process.env[FeatureFlagName.NewDeveloperPortalApis] = String(native);
+      restoreEnv = mockedEnv({ APP_ID: appDef.teamsAppId, APP_MANIFEST_ID: undefined });
+      const zip = new AdmZip();
+      const manifest = new TeamsAppManifest();
+      manifest.id = appDef.teamsAppId!;
+      zip.addFile(Constants.MANIFEST_FILE, Buffer.from(JSON.stringify(manifest)));
+      vi.spyOn(fs, "pathExists").mockImplementation(async () => true);
+      vi.spyOn(fs, "readFile").mockResolvedValue(zip.toBuffer());
+      vi.spyOn(teamsDevPortalClient, "getApp").mockResolvedValue(nativeApp);
+      vi.spyOn(teamsDevPortalClient, "updateApp").mockResolvedValue(nativeApp);
+      vi.spyOn(teamsDevPortalClient, "importApp").mockResolvedValue({
+        ...appDef,
+        tenantId: failure === "legacy tenant" ? undefined : appDef.tenantId,
+        updatedAt: failure === "legacy timestamp" ? undefined : appDef.updatedAt,
+      });
+      const error = new UserError("test", "TenantLookupFailed", "tenant unavailable");
+      vi.spyOn(mockedDriverContext.m365TokenProvider, "getJsonObject").mockResolvedValue(
+        err(error)
+      );
+      const result = (
+        await teamsAppDriver.execute({ appPackagePath: "fakePath" }, mockedDriverContext)
+      ).result;
+      expect(result.isErr()).toBe(true);
+      if (native && result.isErr()) expect(result.error).toBe(error);
+    }
+  );
 
   it("AC-14: updates a split-ID resource without changing the package manifest ID", async () => {
     const args: ConfigureTeamsAppArgs = {
