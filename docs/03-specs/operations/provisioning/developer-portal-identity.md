@@ -22,9 +22,10 @@ retained. No separate handwritten manifest field definitions are maintained.
 
 `teamsApp/create.writeToEnvironmentFile` accepts either `appId` or `teamsAppId`,
 never both, in every supported YAML version. The destination remains customizable.
-An explicit mapping wins; otherwise resolve `APP_ID`, then `TEAMS_APP_ID` when
-empty/missing. Invalid selected values must not fall back. Existing files and
-custom destinations are not rewritten.
+With the new API enabled, an explicit mapping wins; otherwise resolve `APP_ID`,
+then `TEAMS_APP_ID` when empty/missing. Invalid selected values must not fall back.
+The flag-off selection rules are defined below. Existing files and custom
+destinations are not rewritten.
 
 With `TEAMSFX_NEW_DP_APIS` enabled, new templates use `appId: APP_ID`; with it
 disabled they keep `teamsAppId: TEAMS_APP_ID`. Ordinary projects have one ID.
@@ -49,6 +50,22 @@ checks use the authoritative list summary `updatedAt`, matched by resource
 information is surfaced, never replaced with a local clock or ignored.
 The authenticated tenant claim supplies the tenant output for the new API,
 not an arbitrary access-control user's tenant.
+
+## Feature-flag rollback contract
+
+`TEAMSFX_NEW_DP_APIS=false` keeps legacy runtime identity selection: create uses
+its configured output destination (default `TEAMS_APP_ID`), and package-based
+operations use the package manifest ID without migration-only YAML lookup or
+remote identity-agreement checks. Automatic canonical/legacy ID fallback and
+strict selected-ID validation require the flag. Explicit split-ID state still
+fails safely before legacy mutation.
+
+YAML aliases and custom mappings remain accepted in both modes, including MCP
+auth injection. Native response handling follows the selected client. Basic
+required-response checks, credential handling, and correct launch URLs are not
+disabled. Shared post-generation DP handoff and missing-local-YAML fallback
+require the flag; disabled mode retains the original generator post hooks and
+environment selection.
 
 ## Flow
 
@@ -148,3 +165,4 @@ carry the AC ID; scenario composition is owned by the linked scenario spec.
 | AC-16 | L1 | operation-integration | required | HTTP fake | Get/download/delete errors do not trigger manifest/external-ID list scans; list pagination still works. |
 | AC-17 | L1 | compatibility | required | selected environment | Missing split-ID resource state fails; valid equal-ID update-only projects retain the manifest-ID compatibility route. |
 | AC-18 | L1 | operation-integration | required | handoff fake | Missing/invalid response IDs or package identity disagreement fail before inconsistent identity state is persisted. |
+| AC-20 | L1 | compatibility | required | flag matrix + real-file generator handoff + drivers | Flag off preserves configured legacy resource selection and manifest-based update without migration-only consistency checks; flag on retains canonical fallback and validation. Sync, collaboration, uninstall, project info and VS prechecks follow the same gated selection. YAML aliases work in both modes, split-ID state fails safely when disabled, and shared handoff expansion and missing-local-YAML fallback are enabled only with the flag. |

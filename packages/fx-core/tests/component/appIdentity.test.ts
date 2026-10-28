@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT license.
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { err, ok, UserError } from "@microsoft/teamsfx-api";
 import { FeatureFlagName, FeatureFlags } from "../../src/common/featureFlags";
 import { getActiveTeamsDevPortalClient } from "../../src/client/teamsDevPortalClientProvider";
@@ -23,12 +23,54 @@ import { MockedM365Provider } from "../core/utils";
 const resourceId = "11111111-1111-4111-8111-111111111111";
 const manifestId = "22222222-2222-4222-8222-222222222222";
 
+beforeEach(() => {
+  vi.stubEnv(FeatureFlagName.NewDeveloperPortalApis, "true");
+});
+
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.restoreAllMocks();
 });
 
 describe("DP identity compatibility", () => {
+  it.each(["false", "true"])("AC-20: runtime identity selection follows flag %s", (flag) => {
+    vi.stubEnv(FeatureFlagName.NewDeveloperPortalApis, flag);
+    const env = { APP_ID: resourceId, TEAMS_APP_ID: manifestId, CUSTOM_ID: "" };
+    expect(resolveAppResourceId(env)._unsafeUnwrap()).toBe(
+      flag === "true" ? resourceId : manifestId
+    );
+    expect(resolveAppResourceId(env, "CUSTOM_ID")._unsafeUnwrap()).toBe(
+      flag === "true" ? resourceId : ""
+    );
+    expect(resolveAppResourceId(env, "APP_ID")._unsafeUnwrap()).toBe(resourceId);
+    expect(resolveAppResourceId({ TEAMS_APP_ID: "legacy-id" }).isErr()).toBe(flag === "true");
+  });
+
+  it("AC-20: flag-off package identity avoids migration YAML lookup", async () => {
+    vi.stubEnv(FeatureFlagName.NewDeveloperPortalApis, "false");
+    const parse = vi.spyOn(metadataUtil, "parse");
+    const yaml = vi.spyOn(pathUtils, "getYmlFilePath");
+    expect(
+      (
+        await resolveProjectAppResourceId(
+          "project",
+          { APP_ID: resourceId, TEAMS_APP_ID: resourceId },
+          manifestId
+        )
+      )._unsafeUnwrap()
+    ).toBe(manifestId);
+    expect(yaml).not.toHaveBeenCalled();
+    expect(parse).not.toHaveBeenCalled();
+  });
+
+  it("AC-20: flag-off safety checks the actual legacy destination for split state", () => {
+    vi.stubEnv(FeatureFlagName.NewDeveloperPortalApis, "false");
+    const env = { APP_ID: resourceId, APP_MANIFEST_ID: resourceId, TEAMS_APP_ID: manifestId };
+    expect(resolveAppResourceId(env).isErr()).toBe(true);
+    expect(resolveAppResourceId(env, "APP_ID")._unsafeUnwrap()).toBe(resourceId);
+    expect(resolveAppResourceId(env, undefined, manifestId).isErr()).toBe(true);
+  });
+
   it.each([
     { defaultValue: "true", override: undefined, enabled: true },
     { defaultValue: "false", override: undefined, enabled: false },

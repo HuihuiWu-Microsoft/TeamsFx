@@ -525,9 +525,13 @@ export class FxCore extends FxCoreOpenPluginPart {
         teamsAppIdKeyName =
           action.writeToEnvironmentFile?.appId ??
           action.writeToEnvironmentFile?.teamsAppId ??
-          (process.env.APP_ID ? "APP_ID" : "TEAMS_APP_ID");
-        teamsAppId =
-          process.env[teamsAppIdKeyName] || process.env.APP_ID || process.env.TEAMS_APP_ID;
+          (featureFlagManager.getBooleanValue(FeatureFlags.NewDeveloperPortalApis) &&
+          process.env.APP_ID
+            ? "APP_ID"
+            : "TEAMS_APP_ID");
+        teamsAppId = featureFlagManager.getBooleanValue(FeatureFlags.NewDeveloperPortalApis)
+          ? process.env[teamsAppIdKeyName] || process.env.APP_ID || process.env.TEAMS_APP_ID
+          : process.env[teamsAppIdKeyName];
       } else if (action.uses === "botFramework/create") {
         botIdKeyName = action.writeToEnvironmentFile?.botId || "BOT_ID";
         botId = process.env[botIdKeyName];
@@ -545,7 +549,9 @@ export class FxCore extends FxCoreOpenPluginPart {
     if ((teamsAppId || m365TitleId) && m356AppOption) {
       const res = await this.uninstallM365App(
         m365TitleId,
-        process.env.APP_MANIFEST_ID || teamsAppId,
+        featureFlagManager.getBooleanValue(FeatureFlags.NewDeveloperPortalApis)
+          ? process.env.APP_MANIFEST_ID || teamsAppId
+          : teamsAppId,
         this.getAbortSignal(inputs)
       );
       if (res.isErr()) {
@@ -1547,11 +1553,15 @@ export class FxCore extends FxCoreOpenPluginPart {
         const teamsAppIdEnvName =
           teamsAppCreate.writeToEnvironmentFile?.appId ??
           teamsAppCreate.writeToEnvironmentFile?.teamsAppId;
-        res.teamsAppId =
-          (teamsAppIdEnvName ? envObject[teamsAppIdEnvName] : undefined) ||
-          envObject.APP_ID ||
-          envObject.TEAMS_APP_ID ||
-          "";
+        if (featureFlagManager.getBooleanValue(FeatureFlags.NewDeveloperPortalApis)) {
+          res.teamsAppId =
+            (teamsAppIdEnvName ? envObject[teamsAppIdEnvName] : undefined) ||
+            envObject.APP_ID ||
+            envObject.TEAMS_APP_ID ||
+            "";
+        } else if (teamsAppIdEnvName) {
+          res.teamsAppId = envObject[teamsAppIdEnvName];
+        }
         const name = (teamsAppCreate.with as any).name;
         if (name) {
           res.teamsAppName = name.replace("-${{TEAMSFX_ENV}}", "") || "";

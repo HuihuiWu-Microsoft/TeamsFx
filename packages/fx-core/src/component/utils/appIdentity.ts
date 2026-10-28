@@ -32,16 +32,18 @@ export function resolveAppResourceId(
   configuredName?: string,
   manifestFallback?: string
 ): Result<string | undefined, FxError> {
+  const enabled = featureFlagManager.getBooleanValue(FeatureFlags.NewDeveloperPortalApis);
   const resourceId =
     (configuredName ? env[configuredName] : undefined) || env.APP_ID || env.TEAMS_APP_ID;
+  const legacyResourceId = manifestFallback ?? env[configuredName ?? "TEAMS_APP_ID"];
   const separateManifestId = env.APP_MANIFEST_ID;
   if (separateManifestId !== undefined) {
     if (!resourceId || !isUUID(separateManifestId)) {
       return err(appIdentityError("APP_ID / APP_MANIFEST_ID"));
     }
     if (
-      separateManifestId !== resourceId &&
-      !featureFlagManager.getBooleanValue(FeatureFlags.NewDeveloperPortalApis)
+      !enabled &&
+      (separateManifestId !== resourceId || separateManifestId !== legacyResourceId)
     ) {
       return err(
         new UserError({
@@ -51,6 +53,9 @@ export function resolveAppResourceId(
         })
       );
     }
+  }
+  if (!enabled) {
+    return ok(legacyResourceId);
   }
   const selected = resourceId || manifestFallback;
   if (selected && !isUUID(selected)) {
@@ -64,6 +69,13 @@ export async function resolveProjectAppResourceId(
   env: Record<string, string | undefined>,
   manifestFallback?: string
 ): Promise<Result<string | undefined, FxError>> {
+  if (
+    !featureFlagManager.getBooleanValue(FeatureFlags.NewDeveloperPortalApis) &&
+    env.APP_MANIFEST_ID === undefined &&
+    manifestFallback !== undefined
+  ) {
+    return ok(manifestFallback ?? env.TEAMS_APP_ID);
+  }
   const yamlPath = pathUtils.getYmlFilePath(projectPath, env.TEAMSFX_ENV, true);
   let configuredName: string | undefined;
   if (yamlPath) {

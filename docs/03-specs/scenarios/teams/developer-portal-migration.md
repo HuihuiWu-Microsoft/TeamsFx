@@ -39,6 +39,11 @@ flowchart TD
 
 ## Boundary
 
+The expanded shared generator handoff in AC-13 requires `TEAMSFX_NEW_DP_APIS`.
+With it disabled, retain the original TDP/basic-DA/combined generator post hooks;
+MCP, existing-action and API-spec generators do not gain a handoff. AC-20 in the
+operation spec owns the flag-off compatibility matrix.
+
 Split-ID imports are supported only in the environment initialized by handoff:
 local when present, otherwise dev. Users should use local rather than provision a
 separate dev app for an imported split-ID project. See the

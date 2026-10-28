@@ -125,7 +125,7 @@ export class ConfigureTeamsAppDriver implements StepDriver {
     if (identity.isErr()) return err(identity.error);
     const appId = identity.value;
     if (!appId) return err(appIdentityError("APP_ID"));
-    if (manifestId !== (process.env.APP_MANIFEST_ID || appId)) {
+    if (isUsingNewDeveloperPortalApis() && manifestId !== (process.env.APP_MANIFEST_ID || appId)) {
       return err(appIdentityError("manifest.id"));
     }
     try {
@@ -134,7 +134,7 @@ export class ConfigureTeamsAppDriver implements StepDriver {
         "appProfile" in appDefinition
           ? appDefinition.appProfile?.appDetails?.applicationManifest?.id
           : appDefinition.appId;
-      if (remoteManifestId && remoteManifestId !== manifestId) {
+      if (isUsingNewDeveloperPortalApis() && remoteManifestId && remoteManifestId !== manifestId) {
         return err(appIdentityError("manifest.id"));
       }
     } catch (error) {

@@ -203,6 +203,10 @@ describe("DP generator handoff persistence", () => {
     const generator = new TdpGenerator();
     vi.spyOn(generator, "getTemplateInfos").mockResolvedValue(ok([]));
     await fs.outputFile(path.join(projectPath, "env", ".env.dev"), "TEAMS_APP_ID=\n");
+    await fs.copy(
+      path.join(projectPath, "m365agents.yml"),
+      path.join(projectPath, "m365agents.local.yml")
+    );
     const manifest = new TeamsAppManifest();
     manifest.id = resourceId;
     vi.spyOn(appStudio, "getAppPackage").mockResolvedValue(
@@ -227,4 +231,49 @@ describe("DP generator handoff persistence", () => {
     const manifestOutput = await fs.readJson(path.join(projectPath, "appPackage", "manifest.json"));
     expect(manifestOutput.id).toBe("${{TEAMS_APP_ID}}");
   });
+
+  it.each(cases)(
+    "AC-20: flag-off $template retains its original handoff behavior",
+    async ({ template, generator: makeGenerator }) => {
+      vi.stubEnv(FeatureFlagName.NewDeveloperPortalApis, "false");
+      await fs.copy(
+        path.join(projectPath, "m365agents.yml"),
+        path.join(projectPath, "m365agents.local.yml")
+      );
+      const manifest = new TeamsAppManifest();
+      manifest.id = resourceId;
+      const download = vi
+        .spyOn(appStudio, "getAppPackage")
+        .mockResolvedValue(ok({ manifest: Buffer.from(JSON.stringify(manifest)) }));
+      const generator = makeGenerator();
+      if (generator instanceof CombinedProjectGenerator) {
+        await fs.copy(
+          path.join(projectPath, "appPackage"),
+          path.join(projectPath, generator.temporaryFolderName, "appPackage")
+        );
+      }
+      vi.spyOn(generator, "getTemplateInfos").mockResolvedValue(ok([]));
+      const result = await generator.run(
+        createContext(),
+        {
+          platform: Platform.VSCode,
+          projectPath,
+          [QuestionNames.TemplateName]: template,
+          teamsAppFromTdp: { teamsAppId: resourceId, appId: resourceId },
+        },
+        projectPath
+      );
+      expect(result.isOk()).toBe(true);
+      const expected =
+        generator instanceof TdpGenerator ||
+        generator instanceof CombinedProjectGenerator ||
+        template === TemplateNames.DeclarativeAgentBasic;
+      expect(download).toHaveBeenCalledTimes(expected ? 1 : 0);
+      const env = dotenvUtil.deserialize(
+        await fs.readFile(path.join(projectPath, "env", ".env.dev"))
+      ).obj;
+      expect(env.TEAMS_APP_ID).toBe(expected ? resourceId : undefined);
+      expect(env.APP_MANIFEST_ID).toBeUndefined();
+    }
+  );
 });

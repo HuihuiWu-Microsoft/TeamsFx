@@ -8,6 +8,7 @@
 import {
   AppPackageFolderName,
   Context,
+  err,
   FxError,
   GeneratorResult,
   Inputs,
@@ -15,6 +16,8 @@ import {
   Result,
 } from "@microsoft/teamsfx-api";
 import { merge } from "lodash";
+import { featureFlagManager, FeatureFlags } from "../../../common/featureFlags";
+import { developerPortalScaffoldUtils } from "../../developerPortalScaffoldUtils";
 import path from "path";
 import {
   ActionStartOptions,
@@ -128,6 +131,18 @@ export class CombinedProjectGenerator extends DefaultTemplateGenerator {
     fs.copySync(srcFolder, targetFolder, { overwrite: true });
     // delete folder
     fs.removeSync(path.join(destinationPath, this.temporaryFolderName));
+
+    if (
+      inputs.teamsAppFromTdp &&
+      !featureFlagManager.getBooleanValue(FeatureFlags.NewDeveloperPortalApis)
+    ) {
+      const result = await developerPortalScaffoldUtils.updateFilesForTdp(
+        context,
+        inputs.teamsAppFromTdp,
+        inputs
+      );
+      if (result.isErr()) return err(result.error);
+    }
 
     return Promise.resolve(ok({}));
   }

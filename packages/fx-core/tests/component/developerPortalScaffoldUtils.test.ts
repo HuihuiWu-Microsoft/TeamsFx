@@ -1934,7 +1934,28 @@ describe("developPortalScaffoldUtils", () => {
 
     afterEach(() => {
       vi.restoreAllMocks();
+      vi.unstubAllEnvs();
     });
+
+    it.each(["false", "true"])(
+      "AC-20: missing-local-YAML fallback requires flag %s",
+      async (flag) => {
+        vi.stubEnv(FeatureFlagName.NewDeveloperPortalApis, flag);
+        vi.spyOn(pathUtils, "getYmlFilePath").mockReturnValue(undefined);
+        const failure = new UserError("test", "MissingLocalYaml", "No local lifecycle");
+        const read = vi.spyOn(pathUtils, "getEnvFilePath").mockResolvedValue(err(failure));
+        const write = vi.spyOn(envUtil, "writeEnv").mockResolvedValue(ok(undefined));
+        const result = await tdpUtils.updateEnv("app-id", "project");
+        if (flag === "true") {
+          expect(result.isOk()).toBe(true);
+          expect(read).not.toHaveBeenCalled();
+          expect(write).toHaveBeenCalledWith("project", "dev", { APP_ID: "app-id" });
+        } else {
+          expect(result._unsafeUnwrapErr()).toBe(failure);
+          expect(write).not.toHaveBeenCalled();
+        }
+      }
+    );
 
     it("writes to .env.local when it exists", async () => {
       vi.spyOn(pathUtils, "getEnvFilePath").mockResolvedValue(ok("path/to/.env.local"));

@@ -22,6 +22,7 @@ import fs from "fs-extra";
 import * as path from "path";
 import semver from "semver";
 import isUUID from "validator/lib/isUUID";
+import { featureFlagManager, FeatureFlags } from "../common/featureFlags";
 import { getLocalizedString } from "../common/localizeUtils";
 import { InputValidationError } from "../error";
 import { QuestionNames } from "../question/constants";
@@ -168,6 +169,7 @@ async function updateManifest(
   // manifest
   const manifest = JSON.parse(appPackage.manifest.toString("utf8")) as TeamsAppManifest;
   manifest.id =
+    featureFlagManager.getBooleanValue(FeatureFlags.NewDeveloperPortalApis) &&
     manifestId !== getAppResourceId(appDefinition)
       ? "${{APP_MANIFEST_ID}}"
       : `\${{${defaultAppIdEnvName()}}}`;
@@ -336,9 +338,16 @@ export async function updateEnv(
 ): Promise<Result<undefined, FxError>> {
   const variables = {
     [defaultAppIdEnvName()]: appId,
-    ...(manifestId && manifestId !== appId ? { APP_MANIFEST_ID: manifestId } : {}),
+    ...(featureFlagManager.getBooleanValue(FeatureFlags.NewDeveloperPortalApis) &&
+    manifestId &&
+    manifestId !== appId
+      ? { APP_MANIFEST_ID: manifestId }
+      : {}),
   };
-  if (!pathUtils.getYmlFilePath(projectPath, "local", true)) {
+  if (
+    featureFlagManager.getBooleanValue(FeatureFlags.NewDeveloperPortalApis) &&
+    !pathUtils.getYmlFilePath(projectPath, "local", true)
+  ) {
     return await envUtil.writeEnv(projectPath, "dev", variables);
   }
   const localEnvFilePathRes = await pathUtils.getEnvFilePath.bind(pathUtils)(projectPath, "local");

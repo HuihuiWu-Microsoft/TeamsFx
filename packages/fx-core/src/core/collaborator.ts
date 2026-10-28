@@ -49,6 +49,7 @@ import {
 import { FailedToLoadManifestId, FileNotFoundError } from "../error/common";
 import { QuestionNames } from "../question/constants";
 import { resolveAppResourceId, resolveProjectAppResourceId } from "../component/utils/appIdentity";
+import { featureFlagManager, FeatureFlags } from "../common/featureFlags";
 
 export class CollaborationConstants {
   // Collaboartion CLI parameters
@@ -218,7 +219,12 @@ export class CollaborationUtil {
     }
 
     // 3. load from env
-    if (inputs.projectPath && !teamsAppId) {
+    if (
+      inputs.projectPath &&
+      !teamsAppId &&
+      (featureFlagManager.getBooleanValue(FeatureFlags.NewDeveloperPortalApis) ||
+        process.env.APP_MANIFEST_ID !== undefined)
+    ) {
       const identity = await resolveProjectAppResourceId(inputs.projectPath, process.env);
       if (identity.isErr()) return err(identity.error);
       teamsAppId = identity.value;

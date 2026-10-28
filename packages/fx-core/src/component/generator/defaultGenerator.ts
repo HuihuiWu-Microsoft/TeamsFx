@@ -73,7 +73,10 @@ export class DefaultTemplateGenerator implements IGenerator {
 
     const postRes = await this.post(context, inputs, destinationPath, actionContext);
     if (postRes.isErr()) return postRes;
-    if (inputs.teamsAppFromTdp) {
+    if (
+      inputs.teamsAppFromTdp &&
+      featureFlagManager.getBooleanValue(FeatureFlags.NewDeveloperPortalApis)
+    ) {
       const handoffRes = await developerPortalScaffoldUtils.updateFilesForTdp(
         context,
         inputs.teamsAppFromTdp,

@@ -133,6 +133,34 @@ describe("teamsApp/create", async () => {
     expect(createAppSpy).not.toHaveBeenCalled();
   });
 
+  it.each(["appId", "teamsAppId"])(
+    "AC-20: flag-off create honors explicit %s mapping without canonical fallback",
+    async (key) => {
+      restoreEnv = mockedEnv({
+        [FeatureFlagName.NewDeveloperPortalApis]: "false",
+        CUSTOM_ID: "legacy-id",
+        APP_ID: uuid(),
+        TEAMS_APP_ID: uuid(),
+        APP_MANIFEST_ID: undefined,
+      });
+      const get = vi
+        .spyOn(teamsDevPortalClient, "getApp")
+        .mockRejectedValue(new Error("not found"));
+      const imported = vi.spyOn(teamsDevPortalClient, "importApp").mockResolvedValue(appDef);
+      const result = (
+        await teamsAppDriver.execute(
+          { name: "legacy" },
+          mockedDriverContext,
+          new Map([[key, "CUSTOM_ID"]])
+        )
+      ).result._unsafeUnwrap();
+      expect(get).toHaveBeenCalledWith("fakeToken", "legacy-id");
+      expect(imported).toHaveBeenCalledOnce();
+      expect(result.get("CUSTOM_ID")).toBe(appDef.teamsAppId);
+      expect(result.has("APP_ID")).toBe(false);
+    }
+  );
+
   it("generates a manifest app ID when the environment value is empty", async () => {
     process.env[FeatureFlagName.NewDeveloperPortalApis] = "false";
     restoreEnv = mockedEnv({ TEAMS_APP_ID: "" });

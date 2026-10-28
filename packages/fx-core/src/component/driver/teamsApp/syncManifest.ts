@@ -17,6 +17,7 @@ import * as appStudio from "./appStudio";
 import { AppStudioError } from "./errors";
 import { SyncManifestArgs } from "./interfaces/SyncManifest";
 import { appIdentityError, getAppIdEnvName, resolveAppResourceId } from "../../utils/appIdentity";
+import { featureFlagManager, FeatureFlags } from "../../../common/featureFlags";
 import { AppStudioResultFactory } from "./results";
 import { manifestUtils } from "./utils/ManifestUtils";
 
@@ -204,12 +205,12 @@ export class SyncManifestDriver implements StepDriver {
     if (!teamsAppId) {
       for (const action of projectModel.provision?.driverDefs ?? []) {
         if (action.uses === "teamsApp/create") {
-          const teamsAppIdKeyName =
-            action.writeToEnvironmentFile?.appId ?? action.writeToEnvironmentFile?.teamsAppId;
-          teamsAppId =
-            (teamsAppIdKeyName ? envRes.value[teamsAppIdKeyName] : undefined) ||
-            envRes.value.APP_ID ||
-            envRes.value.TEAMS_APP_ID;
+          const teamsAppIdKeyName = getAppIdEnvName(action.writeToEnvironmentFile);
+          teamsAppId = featureFlagManager.getBooleanValue(FeatureFlags.NewDeveloperPortalApis)
+            ? (teamsAppIdKeyName ? envRes.value[teamsAppIdKeyName] : undefined) ||
+              envRes.value.APP_ID ||
+              envRes.value.TEAMS_APP_ID
+            : envRes.value[teamsAppIdKeyName ?? "TEAMS_APP_ID"];
         }
       }
       if (!teamsAppId) {

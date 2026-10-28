@@ -134,6 +134,35 @@ describe("teamsApp/update", async () => {
     }
   });
 
+  it("AC-20: flag-off update uses package identity and legacy import despite unrelated canonical state", async () => {
+    restoreEnv = mockedEnv({
+      [FeatureFlagName.NewDeveloperPortalApis]: "false",
+      APP_ID: uuid(),
+      TEAMS_APP_ID: uuid(),
+      APP_MANIFEST_ID: undefined,
+    });
+    const manifest = new TeamsAppManifest();
+    manifest.id = appDef.teamsAppId!;
+    const zip = new AdmZip();
+    zip.addFile(Constants.MANIFEST_FILE, Buffer.from(JSON.stringify(manifest)));
+    vi.spyOn(fs, "pathExists").mockImplementation(async () => true);
+    vi.spyOn(fs, "readFile").mockImplementation(async () => zip.toBuffer());
+    const get = vi.spyOn(teamsDevPortalClient, "getApp").mockResolvedValue({
+      ...appDef,
+      appId: uuid(),
+    });
+    const importApp = vi.spyOn(teamsDevPortalClient, "importApp").mockResolvedValue(appDef);
+    const update = vi.spyOn(teamsDevPortalClient, "updateApp");
+    const result = await teamsAppDriver.execute(
+      { appPackagePath: "package.zip" },
+      mockedDriverContext
+    );
+    expect(result.result.isOk()).toBe(true);
+    expect(get).toHaveBeenCalledWith("fakeToken", manifest.id);
+    expect(importApp).toHaveBeenCalledOnce();
+    expect(update).not.toHaveBeenCalled();
+  });
+
   it("invalid teams app id", async () => {
     const args: ConfigureTeamsAppArgs = {
       appPackagePath: "fakePath",

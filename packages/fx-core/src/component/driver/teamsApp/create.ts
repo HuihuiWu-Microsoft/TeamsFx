@@ -207,7 +207,10 @@ export class CreateTeamsAppDriver implements StepDriver {
       "appProfile" in createdAppDefinition
         ? createdAppDefinition.appId
         : createdAppDefinition.teamsAppId;
-    if (!resourceId || !isUUID(resourceId) || (appId && resourceId !== appId)) {
+    if (
+      !resourceId ||
+      (isUsingNewDeveloperPortalApis() && (!isUUID(resourceId) || (appId && resourceId !== appId)))
+    ) {
       return err(appIdentityError("appId"));
     }
     let tenantId: string | undefined;
