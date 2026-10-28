@@ -33,11 +33,13 @@ API routing, identity persistence, split-ID validation, and template rendering
 honor the same registered flag default and explicit environment override.
 Explicit Mustache branches retain the complete existing URLs and environment
 references, changing only the ID names. No computed ID-name/reference variables
-are passed to templates. DP handoff applies split-ID runtime bindings internally
+are passed to templates. DP handoff applies the split-ID manifest binding internally
 after rendering; ordinary template generation does not depend on handoff IDs.
 Only unequal-ID DP handoffs persist `APP_MANIFEST_ID` as well as `APP_ID`.
-Their manifests and runtime launch references use the manifest ID; DP operations
-use the resource ID. No additional YAML action inputs/outputs are introduced.
+Their package manifests use the manifest ID; DP operations and Teams
+installation/preview URLs (`installAppPackage=true`) use the resource ID.
+Handoff leaves launch and task files unchanged, preserving their `APP_ID`
+references and query parameters. No additional YAML action inputs/outputs are introduced.
 Split-ID projects require the new API and fail before legacy API mutation.
 
 No resource lookup uses a manifest/external-ID list fallback. Normal app listing
@@ -110,6 +112,17 @@ Do not add `APP_MANIFEST_ID` manually for ordinary apps. DP handoff initializes 
 only when the package manifest identity differs from the DP resource identity.
 Keep `TEAMSFX_NEW_DP_APIS` enabled for those projects. Missing or inconsistent
 identity state is an error, not a reason to create a replacement app.
+
+### Known limitation: environments for split-ID imports
+
+For an imported app whose resource ID differs from its manifest ID, use only
+the local environment initialized by DP handoff. Provisioning a separate dev
+environment is not supported for this corner case: the shared manifest references
+`APP_MANIFEST_ID`, but `teamsApp/create` does not output that binding for the new
+environment. Do not copy the imported app's IDs into dev as a workaround.
+If the generated project has no local environment, use only the dev environment
+initialized by handoff; creating additional environments has the same limitation.
+Ordinary equal-ID projects are unaffected.
 
 Publish the updated schemas at the existing hosted schema URLs as part of
 release. Bundled validation supports the aliases in all supported versions;

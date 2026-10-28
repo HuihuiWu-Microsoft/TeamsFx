@@ -20,10 +20,10 @@ flowchart TD
   P --> C{Resource and manifest IDs equal?}
   C -->|yes| D[Render one-ID project]
   C -->|no| E[Persist APP_ID and APP_MANIFEST_ID]
-  E --> F[Bind manifest/runtime to APP_MANIFEST_ID]
+  E --> F[Bind manifest to APP_MANIFEST_ID; preserve launch resource ID]
   D --> G[Reopen and provision/update]
   F --> G
-  G --> H[DP calls keep resource ID; package keeps manifest ID]
+  G --> H[DP calls and installation URLs keep resource ID; package keeps manifest ID]
 ```
 
 ## Acceptance Criteria
@@ -33,11 +33,16 @@ flowchart TD
 | AC-07 | L1 | scenario | required | template rendering/package | Active VSC/v4/VS templates use canonical names with the flag on and legacy names with it off, valid under declared schema versions. |
 | AC-08 | L1 | scenario | required | provision/package/update | New/existing equal-ID projects update the same resource and preserve package identity. |
 | AC-11 | L1 | scenario | required | equal-ID DP handoff | YAML/env/manifest/runtime bindings agree, with no second ID variable/reference. |
-| AC-13 | L1 | scenario | required | generator completion + real environment files | Every successful DP generator path, including MCP, existing-action, and API-spec templates, persists both IDs only when different; manifest/runtime uses APP_MANIFEST_ID; no extra action fields. Populate local when present, otherwise dev. Failed template processing must not run handoff; preserve warnings and surface handoff errors. |
-| AC-14 | L1 | scenario | required | reopen/lifecycle | Split-ID provision/update/download/sync/ownership/validation uses the resource; package/runtime uses manifest identity. |
+| AC-13 | L1 | scenario | required | generator completion + real environment files | Every successful DP generator path, including MCP, existing-action, and API-spec templates, persists both IDs only when different; manifest uses APP_MANIFEST_ID, while Teams installation/preview URLs retain APP_ID (including local:APP_ID), with query parameters and other launch/task content unchanged; no extra action fields. Populate local when present, otherwise dev. Failed template processing must not run handoff; preserve warnings and surface handoff errors. |
+| AC-14 | L1 | scenario | required | reopen/lifecycle | Split-ID provision/update/download/sync/ownership/validation and Teams installation/preview URLs use the resource; package uses manifest identity. |
 | AC-12 | L2/L3 | surface | smoke | CLI/VS Code | Exercise new/old equal-ID cases and split-ID import/handoff/reopen/update; flag-off split-ID errors are actionable. Local changed handler tests remain required. |
 
 ## Boundary
+
+Split-ID imports are supported only in the environment initialized by handoff:
+local when present, otherwise dev. Users should use local rather than provision a
+separate dev app for an imported split-ID project. See the
+[known environment limitation](../../operations/provisioning/developer-portal-identity.md#known-limitation-environments-for-split-id-imports).
 
 No manual-project repair or backend changes. The operation spec owns resolution,
 DTO, schema, and error semantics. Real-service smoke requires configured accounts;

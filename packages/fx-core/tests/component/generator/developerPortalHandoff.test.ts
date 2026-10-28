@@ -50,7 +50,7 @@ describe("DP generator handoff persistence", () => {
     );
     await fs.outputFile(
       path.join(projectPath, ".vscode", "launch.json"),
-      '{"url":"https://teams.microsoft.com/l/app/${{local:APP_ID}}"}'
+      '{"url":"https://teams.microsoft.com/l/app/${{local:APP_ID}}?installAppPackage=true&webjoin=true&${account-hint}"}'
     );
     vi.spyOn(copilotGptManifestUtils, "getManifestPath").mockResolvedValue(
       ok(path.join(projectPath, "appPackage", "declarativeAgent.json"))
@@ -158,7 +158,9 @@ describe("DP generator handoff persistence", () => {
             path.join(projectPath, ".vscode", "launch.json"),
             "utf8"
           );
-          expect(launch).toContain(split ? "${{local:APP_MANIFEST_ID}}" : "${{local:APP_ID}}");
+          expect(launch).toBe(
+            '{"url":"https://teams.microsoft.com/l/app/${{local:APP_ID}}?installAppPackage=true&webjoin=true&${account-hint}"}'
+          );
           if (local) {
             expect(await fs.readFile(path.join(projectPath, "env", ".env.dev"), "utf8")).toBe(
               "APP_ID=\n"

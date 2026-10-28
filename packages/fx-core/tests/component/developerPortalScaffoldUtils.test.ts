@@ -78,44 +78,36 @@ describe("DP native handoff identity", () => {
     }
   );
 
-  it.each([false, true])(
-    "AC-13: runtime bindings preserve unchanged files and surface read failures (failure=%s)",
-    async (failure) => {
-      vi.stubEnv(FeatureFlagName.NewDeveloperPortalApis, "true");
-      const ctx = createContext();
-      ctx.tokenProvider = new MockTools().tokenProvider;
-      const manifest = new TeamsAppManifest();
-      manifest.id = "22222222-2222-4222-8222-222222222222";
-      vi.mocked(appStudio.getAppPackage).mockResolvedValue(
-        ok({ manifest: Buffer.from(JSON.stringify(manifest)) })
-      );
-      vi.spyOn(manifestUtils, "_readAppManifest").mockResolvedValue(ok(manifest));
-      const write = vi.spyOn(fs, "writeFile").mockResolvedValue();
-      const textFiles: { readFile(file: string, encoding: "utf8"): Promise<string> } = fs;
-      const read = vi.spyOn(textFiles, "readFile");
-      const error = Object.assign(new Error("permission denied"), { code: "EACCES" });
-      if (failure) read.mockRejectedValue(error);
-      else read.mockResolvedValue('{ "configurations": [] }');
-      vi.spyOn(pathUtils, "getEnvFilePath").mockResolvedValue(ok("local.env"));
-      vi.spyOn(fs, "pathExists").mockImplementation(async () => true);
-      const writeEnv = vi.spyOn(envUtil, "writeEnv").mockResolvedValue(ok(undefined));
-      const result = developerPortalScaffoldUtils.updateFilesForTdp(
-        ctx,
-        {
-          appId: "11111111-1111-4111-8111-111111111111",
-          appProfile: { appDetails: { applicationManifest: { id: manifest.id } } },
-        },
-        { platform: Platform.VSCode, projectPath: "project-path" }
-      );
-      if (failure) {
-        await expect(result).rejects.toBe(error);
-        expect(writeEnv).not.toHaveBeenCalled();
-      } else {
-        expect((await result).isOk()).toBe(true);
-      }
-      expect(write).toHaveBeenCalledTimes(1);
-    }
-  );
+  it("AC-13: split handoff does not read or rewrite launch files", async () => {
+    vi.stubEnv(FeatureFlagName.NewDeveloperPortalApis, "true");
+    const ctx = createContext();
+    ctx.tokenProvider = new MockTools().tokenProvider;
+    const manifest = new TeamsAppManifest();
+    manifest.id = "22222222-2222-4222-8222-222222222222";
+    vi.mocked(appStudio.getAppPackage).mockResolvedValue(
+      ok({ manifest: Buffer.from(JSON.stringify(manifest)) })
+    );
+    vi.spyOn(manifestUtils, "_readAppManifest").mockResolvedValue(ok(manifest));
+    const write = vi.spyOn(fs, "writeFile").mockResolvedValue();
+    const textFiles: { readFile(file: string, encoding: "utf8"): Promise<string> } = fs;
+    const read = vi.spyOn(textFiles, "readFile");
+    read.mockRejectedValue(Object.assign(new Error("permission denied"), { code: "EACCES" }));
+    vi.spyOn(pathUtils, "getEnvFilePath").mockResolvedValue(ok("local.env"));
+    vi.spyOn(fs, "pathExists").mockImplementation(async () => true);
+    const writeEnv = vi.spyOn(envUtil, "writeEnv").mockResolvedValue(ok(undefined));
+    const result = await developerPortalScaffoldUtils.updateFilesForTdp(
+      ctx,
+      {
+        appId: "11111111-1111-4111-8111-111111111111",
+        appProfile: { appDetails: { applicationManifest: { id: manifest.id } } },
+      },
+      { platform: Platform.VSCode, projectPath: "project-path" }
+    );
+    expect(result.isOk()).toBe(true);
+    expect(read).not.toHaveBeenCalled();
+    expect(writeEnv).toHaveBeenCalledOnce();
+    expect(write).toHaveBeenCalledTimes(1);
+  });
 
   for (const split of [false, true]) {
     it(`AC-13: ${split ? "split" : "equal"} handoff preserves launch URLs and resource bindings`, async () => {
@@ -165,7 +157,7 @@ describe("DP native handoff identity", () => {
         for (const file of runtimeFiles) {
           chai.assert.equal(
             await fs.readFile(path.join(projectPath, file), "utf8"),
-            JSON.stringify({ urls }).replace(/APP_ID/g, split ? "APP_MANIFEST_ID" : "APP_ID")
+            JSON.stringify({ urls })
           );
         }
         chai.assert.equal(

@@ -84,41 +84,12 @@ export class DeveloperPortalScaffoldUtils {
       return err(manifestRes.error);
     }
 
-    if (manifestId !== resourceId) {
-      await updateRuntimeManifestId(inputs.projectPath);
-    }
-
     const envRes = await updateEnv(resourceId!, inputs.projectPath, manifestId);
     if (envRes.isErr()) {
       return err(envRes.error);
     }
 
     return ok(undefined);
-  }
-}
-
-async function updateRuntimeManifestId(projectPath: string): Promise<void> {
-  const runtimeFiles = [
-    path.join(".vscode", "launch.json"),
-    path.join(".vscode", "tasks.json"),
-    path.join(
-      `.${process.env.TEAMSFX_NEW_PROJECT_TYPE_NAME ?? "M365Agent"}`,
-      "launchSettings.json"
-    ),
-    "launchSettings.json",
-  ];
-  for (const file of runtimeFiles) {
-    const filePath = path.join(projectPath, file);
-    let content: string;
-    try {
-      content = await fs.readFile(filePath, "utf8");
-    } catch (error) {
-      // Not every template has every launch surface.
-      if (error instanceof Error && "code" in error && error.code === "ENOENT") continue;
-      throw error;
-    }
-    const updated = content.replace(/\$\{\{(local:)?APP_ID\}\}/g, "${{$1APP_MANIFEST_ID}}");
-    if (updated !== content) await fs.writeFile(filePath, updated);
   }
 }
 
