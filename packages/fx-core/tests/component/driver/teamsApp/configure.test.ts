@@ -310,8 +310,8 @@ describe("teamsApp/update", async () => {
     expect(JSON.parse(uploaded.readAsText(Constants.MANIFEST_FILE)).id).toBe(appId);
   });
 
-  it("uses legacy app package import by default", async () => {
-    delete process.env[FeatureFlagName.NewDeveloperPortalApis];
+  it("uses legacy app package import when the new API is disabled", async () => {
+    process.env[FeatureFlagName.NewDeveloperPortalApis] = "false";
     const args: ConfigureTeamsAppArgs = { appPackagePath: "fakePath" };
     const appId = uuid();
     const zip = new AdmZip();

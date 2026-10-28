@@ -29,6 +29,8 @@ custom destinations are not rewritten.
 With `TEAMSFX_NEW_DP_APIS` enabled, new templates use `appId: APP_ID`; with it
 disabled they keep `teamsAppId: TEAMS_APP_ID`. Ordinary projects have one ID.
 Templates receive only a `NewDeveloperPortalApis` toggle for this choice.
+API routing, identity persistence, split-ID validation, and template rendering
+honor the same registered flag default and explicit environment override.
 Explicit Mustache branches retain the complete existing URLs and environment
 references, changing only the ID names. No computed ID-name/reference variables
 are passed to templates. DP handoff applies split-ID runtime bindings internally

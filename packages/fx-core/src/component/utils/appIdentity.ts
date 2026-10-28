@@ -4,7 +4,7 @@
 import { err, FxError, M365TokenProvider, ok, Result, UserError } from "@microsoft/teamsfx-api";
 import isUUID from "validator/lib/isUUID";
 import { AppStudioScopes } from "../../common/constants";
-import { FeatureFlagName, isFeatureFlagEnabled } from "../../common/featureFlags";
+import { featureFlagManager, FeatureFlags } from "../../common/featureFlags";
 import { getLocalizedString } from "../../common/localizeUtils";
 import { metadataUtil } from "./metadataUtil";
 import { pathUtils } from "./pathUtils";
@@ -14,7 +14,9 @@ export function getAppIdEnvName(output?: Record<string, string>): string | undef
 }
 
 export function defaultAppIdEnvName(): string {
-  return isFeatureFlagEnabled(FeatureFlagName.NewDeveloperPortalApis) ? "APP_ID" : "TEAMS_APP_ID";
+  return featureFlagManager.getBooleanValue(FeatureFlags.NewDeveloperPortalApis)
+    ? "APP_ID"
+    : "TEAMS_APP_ID";
 }
 
 export function appIdentityError(detail: string): UserError {
@@ -39,7 +41,7 @@ export function resolveAppResourceId(
     }
     if (
       separateManifestId !== resourceId &&
-      !isFeatureFlagEnabled(FeatureFlagName.NewDeveloperPortalApis)
+      !featureFlagManager.getBooleanValue(FeatureFlags.NewDeveloperPortalApis)
     ) {
       return err(
         new UserError({

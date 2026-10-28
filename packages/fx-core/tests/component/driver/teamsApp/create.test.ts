@@ -120,8 +120,8 @@ describe("teamsApp/create", async () => {
     }
   });
 
-  it("uses legacy app package import by default", async () => {
-    delete process.env[FeatureFlagName.NewDeveloperPortalApis];
+  it("uses legacy app package import when the new API is disabled", async () => {
+    process.env[FeatureFlagName.NewDeveloperPortalApis] = "false";
     const args: CreateTeamsAppArgs = { name: appDef.appName! };
     const importAppSpy = vi.spyOn(teamsDevPortalClient, "importApp").mockResolvedValue(appDef);
     const createAppSpy = vi.spyOn(teamsDevPortalClient, "createApp");
@@ -134,7 +134,7 @@ describe("teamsApp/create", async () => {
   });
 
   it("generates a manifest app ID when the environment value is empty", async () => {
-    delete process.env[FeatureFlagName.NewDeveloperPortalApis];
+    process.env[FeatureFlagName.NewDeveloperPortalApis] = "false";
     restoreEnv = mockedEnv({ TEAMS_APP_ID: "" });
     const importAppSpy = vi.spyOn(teamsDevPortalClient, "importApp").mockResolvedValue(appDef);
 
@@ -223,7 +223,7 @@ describe("teamsApp/create", async () => {
   });
 
   it("AC-10: legacy responses without a tenant cannot produce successful outputs", async () => {
-    delete process.env[FeatureFlagName.NewDeveloperPortalApis];
+    process.env[FeatureFlagName.NewDeveloperPortalApis] = "false";
     restoreEnv = mockedEnv({ TEAMS_APP_ID: appId });
     vi.spyOn(teamsDevPortalClient, "getApp").mockResolvedValue({ teamsAppId: appId });
     const result = (await teamsAppDriver.execute({ name: "identity" }, mockedDriverContext)).result;

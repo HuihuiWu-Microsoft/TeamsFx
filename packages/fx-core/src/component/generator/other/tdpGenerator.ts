@@ -5,10 +5,9 @@
  * @author huajiezhang@microsoft.com
  */
 
-import { Context, err, FxError, GeneratorResult, Inputs, ok, Result } from "@microsoft/teamsfx-api";
+import { Context, err, FxError, Inputs, ok, Result } from "@microsoft/teamsfx-api";
 import { InputValidationError } from "../../../error";
 import { ProgrammingLanguage, QuestionNames } from "../../../question/constants";
-import { developerPortalScaffoldUtils } from "../../developerPortalScaffoldUtils";
 import { ActionContext } from "../../middleware/actionExecutionMW";
 import { DefaultTemplateGenerator } from "../defaultGenerator";
 import { Generator } from "../generator";
@@ -88,22 +87,5 @@ export class TdpGenerator extends DefaultTemplateGenerator {
         },
       ])
     );
-  }
-
-  public override async post(
-    context: Context,
-    inputs: Inputs,
-    destinationPath: string,
-    actionContext?: ActionContext
-  ): Promise<Result<GeneratorResult, FxError>> {
-    const res = await developerPortalScaffoldUtils.updateFilesForTdp(
-      context,
-      inputs.teamsAppFromTdp,
-      inputs
-    );
-    if (res.isErr()) {
-      return err(res.error);
-    }
-    return ok({});
   }
 }

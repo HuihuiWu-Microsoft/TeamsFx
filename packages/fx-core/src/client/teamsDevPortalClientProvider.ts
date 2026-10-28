@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT license.
 
-import { FeatureFlagName, isFeatureFlagEnabled } from "../common/featureFlags";
+import { featureFlagManager, FeatureFlags } from "../common/featureFlags";
 import { DevPortalClient, devPortalClient } from "./devPortalClient";
 import { TeamsDevPortalClient, legacyTeamsDevPortalClient } from "./teamsDevPortalClient";
 import { AppResponse } from "./devPortalModels";
@@ -98,7 +98,7 @@ const concreteDescriptors = new Map<
 >();
 
 export function isUsingNewDeveloperPortalApis(): boolean {
-  return isFeatureFlagEnabled(FeatureFlagName.NewDeveloperPortalApis);
+  return featureFlagManager.getBooleanValue(FeatureFlags.NewDeveloperPortalApis);
 }
 
 export function getActiveTeamsDevPortalClient(): TeamsDevPortalClient | DevPortalClient {

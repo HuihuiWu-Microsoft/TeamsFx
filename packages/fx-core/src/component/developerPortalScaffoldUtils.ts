@@ -367,6 +367,9 @@ export async function updateEnv(
     [defaultAppIdEnvName()]: appId,
     ...(manifestId && manifestId !== appId ? { APP_MANIFEST_ID: manifestId } : {}),
   };
+  if (!pathUtils.getYmlFilePath(projectPath, "local", true)) {
+    return await envUtil.writeEnv(projectPath, "dev", variables);
+  }
   const localEnvFilePathRes = await pathUtils.getEnvFilePath.bind(pathUtils)(projectPath, "local");
   if (localEnvFilePathRes.isErr()) return err(localEnvFilePathRes.error);
   if (!!localEnvFilePathRes.value && (await fs.pathExists(localEnvFilePathRes.value))) {

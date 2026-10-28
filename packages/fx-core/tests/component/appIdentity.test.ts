@@ -3,9 +3,14 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { err, ok, UserError } from "@microsoft/teamsfx-api";
-import { FeatureFlagName } from "../../src/common/featureFlags";
+import { FeatureFlagName, FeatureFlags } from "../../src/common/featureFlags";
+import { getActiveTeamsDevPortalClient } from "../../src/client/teamsDevPortalClientProvider";
+import { devPortalClient } from "../../src/client/devPortalClient";
+import { legacyTeamsDevPortalClient } from "../../src/client/teamsDevPortalClient";
+import { Generator } from "../../src/component/generator/generator";
 import {
   getAppIdEnvName,
+  defaultAppIdEnvName,
   getAppTenantId,
   resolveAppResourceId,
   resolveProjectAppResourceId,
@@ -24,6 +29,34 @@ afterEach(() => {
 });
 
 describe("DP identity compatibility", () => {
+  it.each([
+    { defaultValue: "true", override: undefined, enabled: true },
+    { defaultValue: "false", override: undefined, enabled: false },
+    { defaultValue: "true", override: "false", enabled: false },
+    { defaultValue: "false", override: "true", enabled: true },
+  ])(
+    "AC-06/AC-07/AC-15: routing, templates, and identity honor the same flag (%j)",
+    ({ defaultValue, override, enabled }) => {
+      const originalDefault = FeatureFlags.NewDeveloperPortalApis.defaultValue;
+      try {
+        FeatureFlags.NewDeveloperPortalApis.defaultValue = defaultValue;
+        vi.stubEnv(FeatureFlagName.NewDeveloperPortalApis, override);
+        expect(Generator.getDefaultVariables("test").NewDeveloperPortalApis).toBe(
+          enabled ? "true" : ""
+        );
+        expect(defaultAppIdEnvName()).toBe(enabled ? "APP_ID" : "TEAMS_APP_ID");
+        expect(getActiveTeamsDevPortalClient()).toBe(
+          enabled ? devPortalClient : legacyTeamsDevPortalClient
+        );
+        expect(
+          resolveAppResourceId({ APP_ID: resourceId, APP_MANIFEST_ID: manifestId }).isOk()
+        ).toBe(enabled);
+      } finally {
+        FeatureFlags.NewDeveloperPortalApis.defaultValue = originalDefault;
+      }
+    }
+  );
+
   it.each([undefined, null, "", 42])(
     "AC-10: missing or invalid tenant claim fails explicitly (%j)",
     async (tid) => {

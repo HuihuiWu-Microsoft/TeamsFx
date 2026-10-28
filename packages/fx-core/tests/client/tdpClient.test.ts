@@ -2553,7 +2553,7 @@ describe("TeamsDevPortalClient Test", () => {
 
   describe("legacy Developer Portal APIs", () => {
     beforeEach(() => {
-      delete process.env[FeatureFlagName.NewDeveloperPortalApis];
+      process.env[FeatureFlagName.NewDeveloperPortalApis] = "false";
     });
 
     it("uses legacy app definition routes", async () => {

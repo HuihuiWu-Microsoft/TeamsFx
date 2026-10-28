@@ -236,6 +236,13 @@ describe("DP native handoff identity", () => {
 });
 
 describe("developPortalScaffoldUtils", () => {
+  beforeEach(() => {
+    vi.stubEnv(FeatureFlagName.NewDeveloperPortalApis, "false");
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   setTools(new MockTools());
   describe("updateFilesForTdp", () => {
     const sandbox = vi;
@@ -1928,6 +1935,10 @@ describe("developPortalScaffoldUtils", () => {
 
   describe("updateEnv", () => {
     const sandbox = vi;
+
+    beforeEach(() => {
+      vi.spyOn(pathUtils, "getYmlFilePath").mockReturnValue("mock-yml-path");
+    });
 
     afterEach(() => {
       vi.restoreAllMocks();
