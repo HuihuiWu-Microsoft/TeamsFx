@@ -129,7 +129,7 @@ carry the AC ID; scenario composition is owned by the linked scenario spec.
 | AC-04 | L1 | operation-integration | required | driver/resolver | Explicit mapping wins; otherwise canonical wins; invalid nonempty IDs and both output keys fail. |
 | AC-05 | L1 | operation-integration | required | HTTP fake | New detail/list results retain native shape, required identity is validated, optional null data is supported, legacy model is unchanged. |
 | AC-06 | L1 | compatibility | required | API routing | Existing equal-ID apps use the saved resource ID directly with either API. |
-| AC-09 | L1 | compatibility | required | metadata/injection/extension | Both keys and custom mappings remain discoverable by downstream consumers. |
+| AC-09 | L1 | compatibility | required | metadata/injection/extension | Both keys and custom mappings remain discoverable by downstream consumers, including v4 MCP OAuth, Entra, DCR, and API-key injection. Injection follows the existing create output mapping regardless of the API flag, preserves legacy YAML and existing registrations, and never substitutes the manifest ID. |
 | AC-10 | L1 | operation-integration | required | response/freshness | Authenticated tenant and authoritative summary timestamps are used; missing required data fails explicitly. |
 | AC-15 | L1 | compatibility | required | split-ID guard | Flag-off split-ID projects fail with enable-flag guidance before mutation. |
 | AC-16 | L1 | operation-integration | required | HTTP fake | Get/download/delete errors do not trigger manifest/external-ID list scans; list pagination still works. |
